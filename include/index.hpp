@@ -1,0 +1,1 @@
+// costruire e gestire l’indice in RAM.

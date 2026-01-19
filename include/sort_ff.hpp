@@ -1,0 +1,1 @@
+// Interfaccia per l’implementazione FastFlow

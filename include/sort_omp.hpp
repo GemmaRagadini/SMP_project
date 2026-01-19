@@ -1,0 +1,1 @@
+// interfaccia per implementazione OpenMP.

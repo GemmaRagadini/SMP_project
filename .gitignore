@@ -1,0 +1,7 @@
+build/
+*.o
+*.out
+data/*.bin
+results/*
+!results/.gitkeep
+mynotes.txt
