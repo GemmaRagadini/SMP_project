@@ -6,10 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(include)
 
-add_executable(seq src/main_seq.cpp src/io.cpp src/index.cpp)
-add_executable(omp src/main_omp.cpp src/io.cpp src/index.cpp)
-add_executable(ff  src/main_ff.cpp  src/io.cpp src/index.cpp)
-add_executable(mpi src/main_mpi.cpp src/io.cpp src/index.cpp)
+add_executable(seq src/main_seq.cpp src/io.cpp src/index.cpp src/utils.cpp)
+add_executable(omp src/main_omp.cpp src/io.cpp src/index.cpp src/utils.cpp)
+add_executable(ff  src/main_ff.cpp  src/io.cpp src/index.cpp src/utils.cpp)
+add_executable(mpi src/main_mpi.cpp src/io.cpp src/index.cpp src/utils.cpp)
 
 find_package(OpenMP)
 if(OpenMP_CXX_FOUND)

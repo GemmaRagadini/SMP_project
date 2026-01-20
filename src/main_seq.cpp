@@ -4,14 +4,6 @@
 #include <string>
 #include "utils.hpp"
 
-// implementazione dummy
-Params parse_argv(int argc, char** argv)
-{
-    (void)argc;
-    (void)argv;
-    return Params{};
-}
-
 int main(int argc, char** argv)
 {
     Params p = parse_argv(argc, argv);

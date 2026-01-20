@@ -8,4 +8,4 @@
 
 set -euo pipefail
 
-./build/seq --help || true
+./build/seq -r 50 -p 256 -t 10
