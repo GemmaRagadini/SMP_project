@@ -16,4 +16,9 @@ struct IndexRec {
 
 std::vector<IndexRec> build_index_streaming(const std::string& path, std::size_t expected_n);  
 
+void sort_index_seq(std::vector<IndexRec>& idx);
+
+// Verifica che idx sia non-decrescente per key (e coerente in caso di key uguali)
+bool is_sorted_by_key(const std::vector<IndexRec>& idx);
+
 #endif

@@ -8,4 +8,4 @@
 
 set -euo pipefail
 
-./build/seq
+./build/seq 

@@ -31,5 +31,24 @@ int main(int argc, char** argv) {
                 << " len=" << idx[i].len << "\n";
     }
 
+    //ordinamento oracolo 
+    sort_index_seq(idx);  
+
+    //controllo 
+    if (!is_sorted_by_key(idx)){
+        std::cerr << "[error] Index is NOT sorted by key\n";
+        return 1;
+    }
+
+    std::cout << "[ok] Index is sorted by key\n";
+    
+    //stampo di nuovo i primi 5 indici 
+    for (std::size_t i = 0; i < k; ++i) {
+        std::cout << "idx[" << i << "]: key=" << idx[i].key
+                << " offset=" << idx[i].offset
+                << " len=" << idx[i].len << "\n";
+    }
+    
+
     return 0;
 }
