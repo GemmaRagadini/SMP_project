@@ -49,6 +49,15 @@ int main(int argc, char** argv) {
                 << " len=" << idx[i].len << "\n";
     }
     
+    // creazione file output ordinato
+    const std::string out_path = rewrite_sorted_file_streaming(in_path, idx);
+
+    if (!check_sorted_file_streaming(out_path, p.n_records)) {
+        std::cerr << "[error] Sorted output file verification FAILED\n";
+        return 1;
+    }
+
+    std::cout << "[ok] Sorted output file verification OK\n";
 
     return 0;
 }
