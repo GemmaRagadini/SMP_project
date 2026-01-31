@@ -12,6 +12,7 @@
 #include <stdexcept> 
 #include <algorithm>  // per sort 
 #include <cstddef> // per size_t
+#include <vector>
 
 std::vector<IndexRec> build_index_streaming(const std::string& path, std::size_t expected_n) {
       std::ifstream in(path, std::ios::binary); 
@@ -47,24 +48,64 @@ std::vector<IndexRec> build_index_streaming(const std::string& path, std::size_t
       return idx;
 }
 
+
+//comparatore unico 
+bool index_less(const IndexRec& a, const IndexRec& b) {
+      if (a.key != b.key) return a.key < b.key; 
+      return a.offset < b.offset; // ulteriore confronto
+}
+
 // ordinamento sequenziale per chiave
 void sort_index_seq(std::vector<IndexRec>& idx){
-      std::sort(idx.begin(), idx.end(), 
-            [](const IndexRec& a, const IndexRec& b) {
-                  if (a.key != b.key) return a.key < b.key; 
-                  return a.offset < b.offset;
-            });
-
+      std::sort(idx.begin(), idx.end(), index_less);
 }
 
 //controllo ordinamento
 bool is_sorted_by_key(const std::vector<IndexRec>& idx){
       for (std::size_t i = 1; i < idx.size(); ++i) {
-            const  auto& prev = idx[i-1]; 
-            const auto& cur = idx[i]; 
-            if (cur.key < prev.key) return false; 
-            //se key uguali, verifico rispetto all'offset 
-            if (cur.key == prev.key && cur.offset < prev.offset) return false; 
+            if (index_less(idx[i], idx[i-1])) return false; 
       }
       return true;
+}
+
+// combina due metà ordinate in un'unica porzione ordinata
+static void merge_range(std::vector<IndexRec>&a, std::vector<IndexRec>& tmp, std::size_t left, std::size_t mid, std::size_t right) {
+      // mergia a[left:mid) e a[mid:right) in tmp, poi copia in a 
+      std::size_t i = left; 
+      std::size_t j = mid; 
+      std::size_t k = left; 
+      while ( i < mid && j < right) {
+            if (index_less(a[j], a[i])) tmp[k++] = a[j++]; 
+            else tmp[k++]= a[i++];
+      }
+      while(i < mid) tmp[k++] = a[i++]; 
+      while(j < right) tmp[k++] = a[j++];
+
+      if (k != right) {
+            std::cerr << "[merge] bug: k=" << k << " right=" << right
+                      << " left=" << left << " mid=" << mid << "\n";
+            std::abort();
+        }if (k != right) {
+            std::cerr << "[merge] bug: k=" << k << " right=" << right
+                      << " left=" << left << " mid=" << mid << "\n";
+            std::abort();
+        }
+        
+      for (std::size_t t = left; t < right; ++t) a[t] = tmp[t];
+}
+
+static void mergesort_rec(std::vector<IndexRec>& a, std::vector<IndexRec>& tmp, std::size_t left, std::size_t right) {
+      const std::size_t n = right - left; 
+      if (n<=1) return; 
+      const std::size_t mid = left + n / 2; 
+      mergesort_rec(a,tmp, left, mid); 
+      mergesort_rec(a, tmp, mid, right); 
+      // if(!index_less(a[mid], a[mid -1])) return; // se già in ordine
+      merge_range(a,tmp, left, mid, right);
+}
+
+void mergesort_index_seq(std::vector<IndexRec>& idx) {
+      if (idx.size() <= 1) return; 
+      std::vector<IndexRec> tmp(idx.size()); 
+      mergesort_rec(idx, tmp, 0, idx.size());
 }

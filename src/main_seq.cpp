@@ -31,8 +31,8 @@ int main(int argc, char** argv) {
                 << " len=" << idx[i].len << "\n";
     }
 
-    //ordinamento oracolo 
-    sort_index_seq(idx);  
+    //ordinamento sequenziale 
+    mergesort_index_seq(idx);
 
     //controllo 
     if (!is_sorted_by_key(idx)){
@@ -61,3 +61,21 @@ int main(int argc, char** argv) {
 
     return 0;
 }
+
+
+//confronto con oracolo 
+#ifdef DEBUG_ORACLE
+    auto idx_ref = idx;
+    sort_index_seq(idx_ref);
+    if (idx_ref.size() != idx.size()) {
+        std::cerr << "[error] Oracle size mismatch\n";
+        return 1;
+    }
+    for (std::size_t i = 0; i < idx.size(); ++i) {
+        if (idx[i].key != idx_ref[i].key || idx[i].offset != idx_ref[i].offset) {
+            std::cerr << "[error] Mismatch vs oracle at i=" << i << "\n";
+            return 1;
+        }
+    }
+    std::cout << "[ok] Mergesort matches std::sort oracle\n";
+#endif
