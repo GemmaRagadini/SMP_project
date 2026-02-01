@@ -15,6 +15,7 @@ struct Params {
     std::size_t   n_records   = 1'000'000;
     std::uint32_t payload_max = 256;
     std::size_t   n_threads   = 0;
+    std::string algo = "seq"; //default
 };
 
 Params parse_argv(int argc, char** argv);

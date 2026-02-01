@@ -12,6 +12,7 @@ Params parse_argv(int argc, char** argv) {
             cerr << "Error: " << msg << "\n";
             cerr
                   << "Usage: " << argv[0] << " [options]\n"
+                  << "  -a ALG    algorithm: seq | omp | mpi | ff (default seq)"
                   << "  -r N      number of records (default 1000000)\n"
                   << "  -p B      maximum payload size in bytes, B>=8 (default 256)\n"
                   << "  -t T      threads to use (default 0)\n"
@@ -30,6 +31,7 @@ Params parse_argv(int argc, char** argv) {
             if (a == "-h") {
                   cout
                         << "Usage: " << argv[0] << " [options]\n"
+                        << "  -a ALG    algorithm: seq | omp | mpi | ff (default seq)"
                         << "  -r N      number of records (default 1000000)\n"
                         << "  -p B      maximum payload size in bytes, B>=8 (default 256)\n"
                         << "  -t T      threads to use (default 0)\n"
@@ -62,6 +64,14 @@ Params parse_argv(int argc, char** argv) {
                   p.n_threads = static_cast<size_t>(stoull(v));
                   } catch (...) {
                   die("Invalid -t value: " + v);
+                  }
+            }
+            else if (a == "-a") {
+                  string v = need_value(a); 
+                  if (v == "seq" || v == "omp"){
+                        p.algo = v;
+                  } else {
+                        die("Invalid -a value" + v);
                   }
             }
             else {

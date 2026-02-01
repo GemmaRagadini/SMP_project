@@ -2,4 +2,4 @@
 
 set -euo pipefail
 
-./build/seq -n 10000 -p 32
+./build/sorter -n 10000 -p 32

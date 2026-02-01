@@ -13,6 +13,7 @@
 #include <algorithm>  // per sort 
 #include <cstddef> // per size_t
 #include <vector>
+#include <omp.h>
 
 std::vector<IndexRec> build_index_streaming(const std::string& path, std::size_t expected_n) {
       std::ifstream in(path, std::ios::binary); 
@@ -85,12 +86,8 @@ static void merge_range(std::vector<IndexRec>&a, std::vector<IndexRec>& tmp, std
             std::cerr << "[merge] bug: k=" << k << " right=" << right
                       << " left=" << left << " mid=" << mid << "\n";
             std::abort();
-        }if (k != right) {
-            std::cerr << "[merge] bug: k=" << k << " right=" << right
-                      << " left=" << left << " mid=" << mid << "\n";
-            std::abort();
-        }
-        
+      }
+      
       for (std::size_t t = left; t < right; ++t) a[t] = tmp[t];
 }
 
@@ -102,6 +99,33 @@ static void mergesort_rec(std::vector<IndexRec>& a, std::vector<IndexRec>& tmp, 
       mergesort_rec(a, tmp, mid, right); 
       // if(!index_less(a[mid], a[mid -1])) return; // se già in ordine
       merge_range(a,tmp, left, mid, right);
+}
+
+
+static void mergesort_rec_parallel(std::vector<IndexRec>& a, std::vector<IndexRec>& tmp, std::size_t left, std::size_t right, std::size_t cutoff){
+      const std::size_t n = right-left; 
+      if (n <= cutoff) { // dimensione sotto la quale fare sequenziale
+            std::sort(a.begin()+left, a.begin()+right, index_less); 
+            return;
+      }
+      const std::size_t mid = left +n / 2;
+      #pragma omp task shared(a,tmp)
+      mergesort_rec_parallel(a,tmp,left, mid,cutoff);
+      #pragma omp task shared(a,tmp) 
+      mergesort_rec_parallel(a,tmp,mid, right, cutoff);
+      #pragma omp taskwait 
+      merge_range(a,tmp, left, mid , right);
+} 
+
+
+void mergesort_index_openmp(std::vector<IndexRec>& idx, std::size_t cutoff) {
+      if (idx.size() <= 1) return; 
+      std::vector<IndexRec> tmp(idx.size());
+      #pragma omp parallel 
+      {
+            #pragma omp single
+            mergesort_rec_parallel(idx, tmp, 0, idx.size(), cutoff);
+      }
 }
 
 void mergesort_index_seq(std::vector<IndexRec>& idx) {

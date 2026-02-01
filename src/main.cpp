@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <string>
+#include <omp.h>
 #include "utils.hpp"
 #include "io.hpp"
 #include "index.hpp"
@@ -11,7 +12,8 @@ int main(int argc, char** argv) {
     //legge argomenti passati
     Params p = parse_argv(argc, argv);
 
-    std::cout << "Mpi MergeSort\n";
+    std::cout << "MergeSort\n";
+    std::cout << "algorithm : " << p.algo << "\n";
     std::cout << "records     : " << p.n_records   << "\n";
     std::cout << "payload_max : " << p.payload_max << "\n";
     std::cout << "threads     : " << p.n_threads   << "\n";
@@ -31,8 +33,20 @@ int main(int argc, char** argv) {
                 << " len=" << idx[i].len << "\n";
     }
 
-    //mergesort
-    mergesort_index_openmp(idx, 10000);
+    //mergesort 
+    if (p.n_threads > 0) {
+      omp_set_num_threads(p.n_threads); // per ora 
+    }
+    
+    if (p.algo == "seq") {
+      mergesort_index_seq(idx);
+    }
+    else if (p.algo == "omp") {
+      mergesort_index_openmp(idx, 10000);
+    }
+    else {
+      throw std::runtime_error("Unsupported algorithm");
+    }
 
     //controllo 
     if (!is_sorted_by_key(idx)){
