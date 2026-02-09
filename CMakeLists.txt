@@ -11,15 +11,15 @@ include_directories(include)
 
 find_package(OpenMP REQUIRED)
 
-add_executable(seq src/main_seq.cpp src/io.cpp src/index.cpp src/utils.cpp)
-add_executable(omp src/main_omp.cpp src/io.cpp src/index.cpp src/utils.cpp)
-add_executable(ff  src/main_ff.cpp  src/io.cpp src/index.cpp src/utils.cpp)
-add_executable(mpi src/main_mpi.cpp src/io.cpp src/index.cpp src/utils.cpp)
+# add_executable(seq src/main_seq.cpp src/io.cpp src/index.cpp src/utils.cpp)
+# add_executable(omp src/main_omp.cpp src/io.cpp src/index.cpp src/utils.cpp)
+# add_executable(ff  src/main_ff.cpp  src/io.cpp src/index.cpp src/utils.cpp)
+# add_executable(mpi src/main_mpi.cpp src/io.cpp src/index.cpp src/utils.cpp)
 add_executable(sorter src/main.cpp src/io.cpp src/index.cpp src/utils.cpp)
 
 
 if(OpenMP_CXX_FOUND)
-  target_link_libraries(omp PRIVATE OpenMP::OpenMP_CXX)
-  target_link_libraries(mpi PRIVATE OpenMP::OpenMP_CXX)
+  # target_link_libraries(omp PRIVATE OpenMP::OpenMP_CXX)
+  # target_link_libraries(mpi PRIVATE OpenMP::OpenMP_CXX)
   target_link_libraries(sorter PRIVATE OpenMP::OpenMP_CXX)
 endif()

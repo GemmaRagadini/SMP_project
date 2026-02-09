@@ -9,15 +9,19 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <chrono> 
 
 // Parametri minimi
 struct Params {
     std::size_t   n_records   = 1'000'000;
     std::uint32_t payload_max = 256;
     std::size_t   n_threads   = 0;
-    std::string algo = "seq"; //default
+    size_t cutoff = 10000; 
+    std::string algo = "seq";
 };
 
 Params parse_argv(int argc, char** argv);
+
+double seconds_since(const std::chrono::steady_clock::time_point& t0);
 
 #endif

@@ -16,6 +16,7 @@ Params parse_argv(int argc, char** argv) {
                   << "  -r N      number of records (default 1000000)\n"
                   << "  -p B      maximum payload size in bytes, B>=8 (default 256)\n"
                   << "  -t T      threads to use (default 0)\n"
+                  << "  -c C      cutoff (default 10000)\n "
                   << "  -h        show this help\n";
             exit(1);
       };
@@ -35,6 +36,7 @@ Params parse_argv(int argc, char** argv) {
                         << "  -r N      number of records (default 1000000)\n"
                         << "  -p B      maximum payload size in bytes, B>=8 (default 256)\n"
                         << "  -t T      threads to use (default 0)\n"
+                        << "  -c C      cutoff (default 10000)\n "
                         << "  -h        show this help\n";
                   exit(0);
             }
@@ -74,6 +76,12 @@ Params parse_argv(int argc, char** argv) {
                         die("Invalid -a value" + v);
                   }
             }
+            else if (a == "-c") {
+                  string v = need_value(a);
+                  try { p.cutoff = static_cast<size_t>(stoull(v)); }
+                  catch (...) { die("Invalid -c value: " + v); }
+                  if (p.cutoff < 1) die("-c must be > 0");
+            }
             else {
                   die("Unknown option: " + a);
             }
@@ -81,3 +89,9 @@ Params parse_argv(int argc, char** argv) {
 
     return p;
 }
+
+double seconds_since(const std::chrono::steady_clock::time_point& t0) {
+      using namespace std::chrono;
+      return duration<double>(steady_clock::now() - t0).count();
+}
+  
