@@ -87,18 +87,25 @@ int main(int argc, char** argv) {
     double t_total = seconds_since(t_total0);
 
 	//stampo tempi 
-	std::cout
-		<< "TIME "
-		<< "algo=" << p.algo << " "
-		<< "n=" << p.n_records << " "
-		<< "p=" << p.payload_max << " "
-		<< "t=" << (p.algo=="omp" ? omp_get_max_threads() : 1) << " "
-		<< "cutoff=" << p.cutoff << " "
-		<< "build=" << t_build << " "
-		<< "sort="  << t_sort  << " "
-		<< "write=" << t_write << " "
-		<< "val="   << t_check   << " "
-		<< "total=" << t_total << "\n";
+    std::cout << "algo,n,p,threads,build_time,sort_time,write_time,check_time,total_time\n";
+    // numero thread reale
+    int threads = 1;
+    #ifdef _OPENMP
+    if (p.algo == "omp")
+        threads = omp_get_max_threads();
+    #endif
+
+    std::cout
+        << p.algo << ","
+        << p.n_records << ","
+        << p.payload_max << ","
+        << threads << ","
+        << t_build << ","
+        << t_sort << ","
+        << t_write << ","
+        << t_check << ","
+        << t_total
+        << "\n";
 
 
     return 0;
