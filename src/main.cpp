@@ -48,6 +48,9 @@ int main(int argc, char** argv) {
     }
     else if (p.algo == "omp") {
 		mergesort_index_openmp(idx, p.cutoff);
+    } 
+    else if (p.algo == "ff") {
+        mergesort_index_ff(idx, p.cutoff, p.n_threads);
     }
     else {
 		throw std::runtime_error("Unsupported algorithm");
@@ -87,7 +90,7 @@ int main(int argc, char** argv) {
     double t_total = seconds_since(t_total0);
 
 	//stampo tempi 
-    std::cout << "algo,n,p,threads,build_time,sort_time,write_time,check_time,total_time\n";
+    std::cout << "algo,n,p,cutoff, threads, build_time,sort_time,write_time,check_time,total_time\n";
     // numero thread reale
     int threads = 1;
     #ifdef _OPENMP
@@ -95,10 +98,15 @@ int main(int argc, char** argv) {
         threads = omp_get_max_threads();
     #endif
 
+    if (p.algo == "ff" && p.n_threads > 0) {
+        threads = (int)p.n_threads;
+    }
+
     std::cout
         << p.algo << ","
         << p.n_records << ","
         << p.payload_max << ","
+        << p.cutoff << ","
         << threads << ","
         << t_build << ","
         << t_sort << ","

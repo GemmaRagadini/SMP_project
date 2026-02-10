@@ -1,25 +1,23 @@
 cmake_minimum_required(VERSION 3.16)
 project(spm_project2 CXX)
 
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -fsanitize=address,undefined -fno-omit-frame-pointer")
-set(CMAKE_BUILD_TYPE Debug)
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-include_directories(include)
+set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g -fsanitize=address,undefined -fno-omit-frame-pointer")
 
-find_package(OpenMP REQUIRED)
-
-# add_executable(seq src/main_seq.cpp src/io.cpp src/index.cpp src/utils.cpp)
-# add_executable(omp src/main_omp.cpp src/io.cpp src/index.cpp src/utils.cpp)
-# add_executable(ff  src/main_ff.cpp  src/io.cpp src/index.cpp src/utils.cpp)
-# add_executable(mpi src/main_mpi.cpp src/io.cpp src/index.cpp src/utils.cpp)
 add_executable(sorter src/main.cpp src/io.cpp src/index.cpp src/utils.cpp)
 
+#includes 
+target_include_directories(sorter PRIVATE
+  ${CMAKE_SOURCE_DIR}/include
+)
+#FastFlow 
+target_include_directories(sorter PRIVATE
+  ${CMAKE_SOURCE_DIR}/fastflow
+)
+# OpenMP
+find_package(OpenMP REQUIRED)
+target_link_libraries(sorter PRIVATE OpenMP::OpenMP_CXX)
 
-if(OpenMP_CXX_FOUND)
-  # target_link_libraries(omp PRIVATE OpenMP::OpenMP_CXX)
-  # target_link_libraries(mpi PRIVATE OpenMP::OpenMP_CXX)
-  target_link_libraries(sorter PRIVATE OpenMP::OpenMP_CXX)
-endif()
+

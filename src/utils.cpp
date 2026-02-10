@@ -12,11 +12,11 @@ Params parse_argv(int argc, char** argv) {
             cerr << "Error: " << msg << "\n";
             cerr
                   << "Usage: " << argv[0] << " [options]\n"
-                  << "  -a ALG    algorithm: seq | omp | mpi | ff (default seq)"
-                  << "  -r N      number of records (default 1000000)\n"
-                  << "  -p B      maximum payload size in bytes, B>=8 (default 256)\n"
-                  << "  -t T      threads to use (default 0)\n"
-                  << "  -c C      cutoff (default 10000)\n "
+                  << "  -a ALG    algorithm: seq | omp | mpi | ff"
+                  << "  -r N      number of records\n"
+                  << "  -p B      maximum payload size in bytes, B>=8\n"
+                  << "  -t T      threads to use\n"
+                  << "  -c C      cutoff\n "
                   << "  -h        show this help\n";
             exit(1);
       };
@@ -32,11 +32,11 @@ Params parse_argv(int argc, char** argv) {
             if (a == "-h") {
                   cout
                         << "Usage: " << argv[0] << " [options]\n"
-                        << "  -a ALG    algorithm: seq | omp | mpi | ff (default seq)"
-                        << "  -r N      number of records (default 1000000)\n"
-                        << "  -p B      maximum payload size in bytes, B>=8 (default 256)\n"
-                        << "  -t T      threads to use (default 0)\n"
-                        << "  -c C      cutoff (default 10000)\n "
+                        << "  -a ALG    algorithm: seq | omp | mpi | ff"
+                        << "  -r N      number of records\n"
+                        << "  -p B      maximum payload size in bytes, B>=8\n"
+                        << "  -t T      threads to use\n"
+                        << "  -c C      cutoff\n "
                         << "  -h        show this help\n";
                   exit(0);
             }
@@ -70,7 +70,7 @@ Params parse_argv(int argc, char** argv) {
             }
             else if (a == "-a") {
                   string v = need_value(a); 
-                  if (v == "seq" || v == "omp"){
+                  if (v == "seq" || v == "omp" || v == "ff"){
                         p.algo = v;
                   } else {
                         die("Invalid -a value" + v);

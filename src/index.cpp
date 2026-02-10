@@ -14,6 +14,10 @@
 #include <cstddef> // per size_t
 #include <vector>
 #include <omp.h>
+#include <ff/ff.hpp>          
+#include <ff/farm.hpp> 
+#include <ff/parallel_for.hpp> 
+
 
 std::vector<IndexRec> build_index_streaming(const std::string& path, std::size_t expected_n) {
       std::ifstream in(path, std::ios::binary); 
@@ -132,4 +136,108 @@ void mergesort_index_seq(std::vector<IndexRec>& idx) {
       if (idx.size() <= 1) return; 
       std::vector<IndexRec> tmp(idx.size()); 
       mergesort_rec(idx, tmp, 0, idx.size());
+}
+
+
+//FASTFLOW  
+
+// struct RangeTask {
+//       std::size_t l; 
+//       std::size_t r;
+// }; 
+
+static void merge_to (const std::vector<IndexRec>& src, std::vector<IndexRec>& dst, std::size_t left, std::size_t mid, std::size_t right) {
+      //mergia src[left:min) e strc[mid, right) in dtf[left:right]
+      if (mid >= right) { //copia
+            for (std::size_t i = left; i < right; ++i){
+                  dst[i] = src[i];
+            }
+            return;
+      }
+      std::size_t i = left; 
+      std::size_t j = mid; 
+      std::size_t k = left; 
+      while (i < mid && j < right) {
+            if (index_less(src[j], src[i])) dst[k++] = src[j++]; 
+            else dst[k++] = src[i++];
+      }
+      while (i < mid) dst[k++] = src[i++]; 
+      while (j < right) dst[k++] = src[j++];
+}
+
+
+// class SortWorker : public ff::ff_node_t<RangeTask> {
+//       public:
+//           explicit SortWorker(std::vector<IndexRec>* a) : a(a) {}
+      
+//           RangeTask* svc(RangeTask* t) override {
+//               std::sort(a->begin() + t->l, a->begin() + t->r, index_less);
+//               delete t;                          // <-- qui
+//               return (RangeTask*)ff::FF_GO_ON;      // <-- niente collector
+//           }
+      
+//       private:
+//           std::vector<IndexRec>* a;
+// };
+
+
+// class SortEmitter : public ff::ff_node_t<RangeTask> {
+//       public: 
+//             SortEmitter(std::size_t n, std::size_t block) : n(n), block(block) {}
+//             RangeTask* svc(RangeTask*) override {
+//                   for (std::size_t l = 0 ; l < n; l += block) {
+//                         std::size_t r = std::min(l + block, n); 
+//                         ff_send_out(new RangeTask{l, r});
+//                   }
+//                   return EOS;
+//             }
+//       private: 
+//             std::size_t n; 
+//             std::size_t block;
+// };
+
+
+void mergesort_index_ff(std::vector<IndexRec>& idx, std::size_t cutoff, std::size_t nw) {
+      const std::size_t n = idx.size(); 
+      if (n<=1) return; 
+
+      std::size_t block = std::max<std::size_t>(1, cutoff); 
+      if (block > n) block = n;  
+
+      //numero workers 
+      std::size_t workers = (nw > 0) ? nw : (std::size_t) std::max<ssize_t>(1, ff_numCores()); 
+      if (workers == 0) workers = 1;
+
+
+      ff::ParallelFor pf((int)workers); 
+      pf.parallel_for(std::size_t(0), n, block, [&](const std::size_t l) {
+            const std::size_t r = std::min(l+block, n);
+            std::sort(idx.begin()+l, idx.begin() +r, index_less);
+      });
+
+      std::vector<IndexRec> tmp(n); 
+      auto *src = &idx; 
+      auto *dst = &tmp;
+
+      for (std::size_t width = block; width < n; width<<=1) {
+            const std::size_t step = width << 1; 
+            pf.parallel_for(std::size_t(0), n, step, [&](const std::size_t left) {
+                  const std::size_t mid = std::min(left + width, n); 
+                  const std::size_t right = std::min(left + step, n);
+
+                  std::size_t i = left, j = mid, k = left; 
+                  while( i < mid && j < right) {
+                        if (index_less((*src)[j], (*src)[i]))(*dst)[k++] = (*src)[j++];
+                        else (*dst)[k++]=(*src)[i++];
+                  }
+                  while (i < mid) {
+                        (*dst)[k++] = (*src)[i++];
+                  }
+                  while (j < right) {
+                        (*dst)[k++] = (*src)[j++];
+                  }
+            });
+            std::swap(src, dst);
+      }
+      if (src !=&idx) idx = std::move(*src);
 }

@@ -31,4 +31,6 @@ void mergesort_index_seq(std::vector<IndexRec>& idx);
 //check
 bool is_sorted_by_key(const std::vector<IndexRec>& idx);
 
+void mergesort_index_ff(std::vector<IndexRec>& idx, std::size_t cutoff, std::size_t nw);
+
 #endif

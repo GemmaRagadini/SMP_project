@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p build
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
+build_one () {
+  local TYPE=$1
+  local DIR="build-${TYPE,,}"
+  cmake -S . -B "$DIR" -DCMAKE_BUILD_TYPE="$TYPE"
+  cmake --build "$DIR" -j
+}
+
+if [[ "${1:-}" == "All" ]]; then
+  build_one Release
+  build_one Debug
+else
+  build_one "${1:-Release}"
+fi
