@@ -9,13 +9,13 @@
 #include <vector>
 
 struct IndexRec {
-      std::uint64_t key; 
-      std::uint64_t offset; //offstet nel file dove inizia il record 
-      std::uint32_t len; 
-}; 
+      unsigned long key;   
+      uint64_t      offset;
+      uint32_t      len;
+};
 
 //costruisci indice
-std::vector<IndexRec> build_index_streaming(const std::string& path, std::size_t expected_n);  
+std::vector<IndexRec> build_index_mmap(const std::string& path, std::size_t n);
 
 //comparatore unico 
 bool index_less(const IndexRec& a, const IndexRec& b);

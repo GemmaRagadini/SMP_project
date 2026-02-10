@@ -27,7 +27,7 @@ int main(int argc, char** argv) {
 
     auto t0 = std::chrono::steady_clock::now(); 
     //legge il file binario e costruisce un indice in RAM contentente solo info per ordinamento 
-    auto idx = build_index_streaming(in_path, p.n_records);
+    auto idx = build_index_mmap(in_path, p.n_records);
     double t_build = seconds_since(t0);
 
     // //stampa i primi 5 indici 
@@ -73,14 +73,19 @@ int main(int argc, char** argv) {
     //             << " len=" << idx[i].len << "\n";
     // }
 
-	t0 = std::chrono::steady_clock::now();
-    // creazione file output ordinato
-    const std::string out_path = rewrite_sorted_file_streaming(in_path, idx);
-	double t_write= seconds_since(t0);
+    std::string out_path = "data/sorted_" + std::to_string(p.n_records) + "_" + std::to_string(p.payload_max) + ".bin";
 
 	t0 = std::chrono::steady_clock::now();
-    if (!check_sorted_file_streaming(out_path, p.n_records)) {
-        std::cerr << "[error] Sorted output file verification FAILED\n";
+    // creazione file output ordinato
+    if (!rewrite_sorted_file_mmap(in_path, out_path, idx)) {
+        std::cerr << "rewrite_sorted_file_mmap failed\n";
+        return 1;
+    }	
+    double t_write= seconds_since(t0);
+
+	t0 = std::chrono::steady_clock::now();
+    if (!check_sorted_file_mmap(out_path, p.n_records)) {
+        std::cerr << "check_sorted_file_mmap failed\n";
         return 1;
     }
 	double t_check = seconds_since(t0);
@@ -114,14 +119,9 @@ int main(int argc, char** argv) {
         << t_check << ","
         << t_total
         << "\n";
-
-
-    return 0;
-}
-
-
-//confronto con oracolo 
-#ifdef DEBUG_ORACLE
+    
+    //confronto con oracolo 
+    #ifdef DEBUG_ORACLE
     auto idx_ref = idx;
     sort_index_seq(idx_ref);
     if (idx_ref.size() != idx.size()) {
@@ -135,4 +135,10 @@ int main(int argc, char** argv) {
         }
     }
     std::cout << "[ok] Mergesort matches std::sort oracle\n";
-#endif
+    #endif
+
+
+    return 0;
+}
+
+

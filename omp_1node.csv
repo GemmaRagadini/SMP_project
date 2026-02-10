@@ -1,6 +1,0 @@
-algo=omp, n=5000000, p=32, t=1, cutoff=10000, build_time=7.67051, sort_time=9.36485, write_time=13.0676, check_time=6.54707, total_time=36.8465
-algo=omp, n=5000000, p=32, t=2, cutoff=10000, build_time=7.42572, sort_time=8.92451, write_time=12.5074, check_time=7.11408, total_time=36.1684
-algo=omp, n=5000000, p=32, t=4, cutoff=10000, build_time=7.44239, sort_time=5.233, write_time=12.8276, check_time=6.57228, total_time=32.2719
-algo=omp, n=5000000, p=32, t=8, cutoff=10000, build_time=7.47812, sort_time=3.29361, write_time=13.0659, check_time=6.66505, total_time=30.6992
-algo=omp, n=5000000, p=32, t=16, cutoff=10000, build_time=7.71933, sort_time=2.11319, write_time=12.7187, check_time=6.65854, total_time=29.4064
-algo=omp, n=5000000, p=32, t=32, cutoff=10000, build_time=7.90606, sort_time=1.61889, write_time=12.9543, check_time=6.91172, total_time=29.5883

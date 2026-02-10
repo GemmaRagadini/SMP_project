@@ -10,6 +10,12 @@
 #include <vector>
 #include <stdexcept>
 #include <cstdint>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <cstring>   // memcpy
+
 
 //creazione path
 static std::string make_path(std::size_t n, std::uint32_t pmax) {
@@ -36,7 +42,7 @@ string ensure_unsorted_file(std::size_t n_records, std::uint32_t payload_max, Ge
 
       // deterministic RNG 
       std::mt19937 rng(42);  
-      std::uniform_int_distribution<std::uint64_t> key_dist(0, 0x7fffffffULL);
+      std::uniform_int_distribution<unsigned long> key_dist(0, 0x7fffffffULL);
       std::uniform_int_distribution<std::uint32_t> len_dist(8, payload_max); 
       std::uniform_int_distribution<int> byte_dist(0,255);
 
@@ -46,7 +52,7 @@ string ensure_unsorted_file(std::size_t n_records, std::uint32_t payload_max, Ge
       std::size_t bytes = 0; 
 
       for (std::size_t i =0 ; i <n_records; ++i){
-            const std::uint64_t key = key_dist(rng); 
+            const unsigned long key = key_dist(rng); 
             const std::uint32_t len = len_dist(rng);  
             payload.resize(len); 
             for (std::uint32_t j = 0; j < len; ++j) {
@@ -79,87 +85,150 @@ static std::string make_sorted_path_from_unsorted(const std::string& in_path){
       return out; 
 }
 
-// riscrive un file ordinato copiando i record da in_path secondo l'ordine di idx, poi ritorna il path del file 
-std::string rewrite_sorted_file_streaming(const std::string& in_path, const std::vector<IndexRec>& idx) {
-      const std::string out_path = make_sorted_path_from_unsorted(in_path);
-      std::ifstream in(in_path, std::ios::binary);
-      if (!in) throw std::runtime_error("Cannot open input file: " + in_path);
-      std::ofstream out(out_path, std::ios::binary | std::ios::trunc);
-      if (!out) throw std::runtime_error("Cannot open output file: " + out_path);
-      std::vector<char> buf;
-      for (std::size_t i = 0; i < idx.size(); ++i) {
-            const auto& r = idx[i];
-            // Dimensione record su disco: key(8) + len(4) + payload(len)
-            const std::size_t rec_size = sizeof(std::uint64_t) + sizeof(std::uint32_t) + r.len;
-            buf.resize(rec_size);
-            // Vai all'offset del record nel file di input
-            in.seekg(static_cast<std::streamoff>(r.offset), std::ios::beg);
-            if (!in) throw std::runtime_error("seekg failed at record " + std::to_string(i));
-            // Leggi l'intero record (header + payload) in buffer
-            in.read(buf.data(), static_cast<std::streamsize>(rec_size));
-            if (!in) throw std::runtime_error("read failed at record " + std::to_string(i));
-            // Scrivi il record nel file di output
-            out.write(buf.data(), static_cast<std::streamsize>(rec_size));
-            if (!out) throw std::runtime_error("write failed at record " + std::to_string(i));
+bool rewrite_sorted_file_mmap(const std::string& in_path, const std::string& out_path, const std::vector<IndexRec>& idx) {
+      
+      // 1) open+stat input
+      int fd_in = ::open(in_path.c_str(), O_RDONLY);
+      if (fd_in < 0) { perror("open in"); return false; }
+
+      struct stat st{};
+      if (fstat(fd_in, &st) < 0) { perror("fstat in"); ::close(fd_in); return false; }
+      const std::size_t in_sz = static_cast<std::size_t>(st.st_size);
+
+      // 2) mmap input RO
+      const char* in_map = static_cast<const char*>(
+      ::mmap(nullptr, in_sz, PROT_READ, MAP_SHARED, fd_in, 0)
+      );
+      if (in_map == MAP_FAILED) { perror("mmap in"); ::close(fd_in); return false; }
+
+      // 3) compute out size (sum of record sizes)
+      std::size_t out_sz = 0;
+      for (const auto& r : idx) {
+      out_sz += sizeof(r.key) + sizeof(r.len) + r.len;
       }
 
-      out.close();
-      in.close();
+      // 4) open+truncate output
+      int fd_out = ::open(out_path.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
+      if (fd_out < 0) {
+      perror("open out");
+      ::munmap((void*)in_map, in_sz);
+      ::close(fd_in);
+      return false;
+      }
+      if (ftruncate(fd_out, static_cast<off_t>(out_sz)) < 0) {
+      perror("ftruncate out");
+      ::close(fd_out);
+      ::munmap((void*)in_map, in_sz);
+      ::close(fd_in);
+      return false;
+      }
 
-      std::cout << "[io] Wrote sorted file: " << out_path << "\n";
-      return out_path;
+      // 5) mmap output WO
+      char* out_map = static_cast<char*>(
+      ::mmap(nullptr, out_sz, PROT_WRITE, MAP_SHARED, fd_out, 0)
+      );
+      if (out_map == MAP_FAILED) {
+      perror("mmap out");
+      ::close(fd_out);
+      ::munmap((void*)in_map, in_sz);
+      ::close(fd_in);
+      return false;
+      }
+
+      // 6) copy records in sorted order
+      std::size_t out_off = 0;
+      for (std::size_t i = 0; i < idx.size(); ++i) {
+      const IndexRec& r = idx[i];
+      const std::size_t rec_sz = sizeof(r.key) + sizeof(r.len) + r.len;
+
+      // bounds safety on input
+      if (r.offset + rec_sz > in_sz) {
+      std::fprintf(stderr, "[rewrite] bad offset/size at i=%zu (off=%llu rec_sz=%zu in_sz=%zu)\n",
+      i, (unsigned long long)r.offset, rec_sz, in_sz);
+      ::munmap(out_map, out_sz);
+      ::munmap((void*)in_map, in_sz);
+      ::close(fd_out);
+      ::close(fd_in);
+      return false;
+      }
+
+      std::memcpy(out_map + out_off, in_map + r.offset, rec_sz);
+      out_off += rec_sz;
+      }
+
+      // 7) cleanup
+      ::munmap(out_map, out_sz);
+      ::munmap((void*)in_map, in_sz);
+      ::close(fd_out);
+      ::close(fd_in);
+
+      return true;
 }
 
-//verifica che il file sia ordinato per key e contenga expectd_n record 
-bool check_sorted_file_streaming(const std::string& path, std::size_t expected_n) {
-      std::ifstream in(path, std::ios::binary);
-      if (!in) {
-            std::cerr << "[check] Cannot open file: " << path << "\n";
-            return false;
-      }
+bool check_sorted_file_mmap(const std::string& path, std::size_t expected_n) {
+      int fd = ::open(path.c_str(), O_RDONLY);
+      if (fd < 0) { perror("open"); return false; }
 
-      std::uint64_t prev_key = 0;
+      struct stat st{};
+      if (fstat(fd, &st) < 0) { perror("fstat"); ::close(fd); return false; }
+      const std::size_t sz = static_cast<std::size_t>(st.st_size);
+
+      const unsigned char* base = static_cast<const unsigned char*>(
+            ::mmap(nullptr, sz, PROT_READ, MAP_SHARED, fd, 0)
+      );
+      if (base == MAP_FAILED) { perror("mmap"); ::close(fd); return false; }
+
+      std::size_t pos = 0;
+      unsigned long prev_key = 0;
       bool have_prev = false;
 
       for (std::size_t i = 0; i < expected_n; ++i) {
-            std::uint64_t key = 0;
-            std::uint32_t len = 0;
+            unsigned long key;
+            std::uint32_t len;
 
-            in.read(reinterpret_cast<char*>(&key), sizeof(key));
-            if (!in) {
-                  std::cerr << "[check] Unexpected EOF while reading key at record " << i << "\n";
+            if (pos + sizeof(key) + sizeof(len) > sz) {
+                  std::cerr << "[check] Unexpected EOF in header at record " << i << "\n";
+                  ::munmap((void*)base, sz);
+                  ::close(fd);
                   return false;
             }
 
-            in.read(reinterpret_cast<char*>(&len), sizeof(len));
-            if (!in) {
-                  std::cerr << "[check] Unexpected EOF while reading len at record " << i << "\n";
+            std::memcpy(&key, base + pos, sizeof(key));
+            pos += sizeof(key);
+
+            std::memcpy(&len, base + pos, sizeof(len));
+            pos += sizeof(len);
+
+            if (pos + len > sz) {
+                  std::cerr << "[check] Unexpected EOF in payload at record " << i << "\n";
+                  ::munmap((void*)base, sz);
+                  ::close(fd);
                   return false;
             }
 
             if (have_prev && key < prev_key) {
                   std::cerr << "[check] Out of order at record " << i
                         << ": " << key << " < " << prev_key << "\n";
+                  ::munmap((void*)base, sz);
+                  ::close(fd);
                   return false;
             }
             prev_key = key;
             have_prev = true;
 
-            // Salta payload
-            in.seekg(static_cast<std::streamoff>(len), std::ios::cur);
-            if (!in) {
-                  std::cerr << "[check] Unexpected EOF while skipping payload at record " << i << "\n";
-                  return false;
-            }
+            pos += len;
       }
 
-      // Verifica che non ci siano byte extra oltre expected_n record (controllo “strict”)
-      char extra;
-      if (in.read(&extra, 1)) {
-            std::cerr << "[check] File has extra bytes beyond expected records\n";
+      // strict: after expected_n records, must be exactly EOF
+      if (pos != sz) {
+            std::cerr << "[check] File has extra bytes (pos=" << pos << " sz=" << sz << ")\n";
+            ::munmap((void*)base, sz);
+            ::close(fd);
             return false;
       }
 
+      ::munmap((void*)base, sz);
+      ::close(fd);
       std::cout << "[check] File is sorted and has " << expected_n << " records\n";
       return true;
 }
