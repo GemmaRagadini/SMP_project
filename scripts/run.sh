@@ -19,6 +19,7 @@ DEFAULT_P=32
 DEFAULT_A=seq
 DEFAULT_T=4
 DEFAULT_C=10000
+DEFAULT_RANKS=4
 
 ARGS=("$@")
 
@@ -63,6 +64,36 @@ if ! has_flag "-c"; then
   if [[ "$algo" == "ff" ]]; then
     ARGS+=("-c" "$DEFAULT_C")
   fi
+fi
+
+algo="$DEFAULT_A"
+for ((i=0; i<${#ARGS[@]}; i++)); do
+  if [[ "${ARGS[i]}" == "-a" && $((i+1)) -lt ${#ARGS[@]} ]]; then
+    algo="${ARGS[i+1]}"
+    break
+  fi
+done
+
+if [[ "$algo" == "mpi" ]]; then
+  # allow user to pass -np X (optional)
+  # usage example: ./scripts/run.sh Release --np 8 -a mpi ...
+  NP="$DEFAULT_RANKS"
+  # parse --np if present
+  for ((i=0; i<${#ARGS[@]}; i++)); do
+    if [[ "${ARGS[i]}" == "--np" && $((i+1)) -lt ${#ARGS[@]} ]]; then
+      NP="${ARGS[i+1]}"
+      # remove --np and value from ARGS
+      unset 'ARGS[i]'
+      unset 'ARGS[i+1]'
+      # compact array
+      ARGS=("${ARGS[@]}")
+      break
+    fi
+  done
+
+  exec mpirun -np "$NP" "$EXEC" "${ARGS[@]}"
+else
+  exec "$EXEC" "${ARGS[@]}"
 fi
 
 exec "$EXEC" "${ARGS[@]}"

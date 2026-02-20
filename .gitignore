@@ -2,6 +2,7 @@ build-debug/
 build-release/
 *.o
 *.out
+.vscode
 data/*.bin
 results/*
 !results/.gitkeep
