@@ -123,7 +123,9 @@ int main(int argc, char** argv) {
 #endif
     // per FastFlow ti interessa il parametro esplicito
     if (p.algo == "ff" && p.n_threads > 0) threads = (int)p.n_threads;
-
+    
+    double t_c = t_build + t_sort; // per confronto 
+    
     std::cout
         << p.algo << ","
         << p.n_records << ","

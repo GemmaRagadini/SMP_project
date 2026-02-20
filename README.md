@@ -21,6 +21,10 @@ Ex. Run with custom parameters (Release):
 Ex. Run with custom parameters (Debug):
 ./scripts/run.sh Debug -a omp -t 4
 
+# run esperimenti senza modificare file
+BUILD_TYPE=Debug OUTDIR=myres ./scripts/run_experiments.sh
+N=20000000 P=32 THREADS=16 ./scripts/run_experiments.sh
+
 Alorithms: 
 -a seq
 -a omp

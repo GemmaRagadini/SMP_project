@@ -279,8 +279,10 @@ int run_mpi(const Params& p) {
     MPI_Reduce(&t_merge, &t_merge_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&t_total, &t_total_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
+    double t_c = t_build + t_sort_max + t_merge_max;
+    
     if (rank == 0) {
-        std::cout << "algo,n,p,cutoff,threads_per_rank,build_time,sort_time_max,merge_time_max,write_time,check_time,total_time_max\n";
+        std::cout << "algo,n,p,cutoff,threads_per_rank,build_time,sort_time_max,merge_time_max,write_time,check_time,total_time_max, t_c\n";
         std::cout << "mpi,"
                   << p.n_records << ","
                   << p.payload_max << ","
@@ -291,7 +293,8 @@ int run_mpi(const Params& p) {
                   << t_merge_max << ","
                   << t_write << ","
                   << t_check << ","
-                  << t_total_max
+                  << t_total_max << ","
+                  << t_c
                   << "\n";
     }
 

@@ -13,11 +13,11 @@ if [[ ! -x "$EXEC" ]]; then
   exit 1
 fi
 
-# Defaults (used only if the corresponding flag is NOT provided by the user)
+# Default
 DEFAULT_N=10000
 DEFAULT_P=32
 DEFAULT_A=seq
-DEFAULT_T=4
+DEFAULT_T=4 
 DEFAULT_C=10000
 DEFAULT_RANKS=4
 
@@ -96,4 +96,3 @@ else
   exec "$EXEC" "${ARGS[@]}"
 fi
 
-exec "$EXEC" "${ARGS[@]}"
