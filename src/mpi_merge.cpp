@@ -271,31 +271,31 @@ int run_mpi(const Params& p) {
     // TIMING per report: uso il MAX (worst rank) per sort/merge/total
     double t_total = MPI_Wtime() - t_total0;
 
-    double t_sort_max = 0.0;
-    double t_merge_max = 0.0;
+    double sort_time = 0.0;
+    double merge_time = 0.0;
     double t_total_max = 0.0;
 
-    MPI_Reduce(&t_sort,  &t_sort_max,  1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&t_merge, &t_merge_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&t_sort,  &sort_time,  1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&t_merge, &merge_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
     MPI_Reduce(&t_total, &t_total_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
-    double t_c = t_build + t_sort_max + t_merge_max;
-    
+    double kernel_time = t_build + sort_time + merge_time;
+
     if (rank == 0) {
-        std::cout << "algo,n,p,cutoff,threads_per_rank,build_time,sort_time_max,merge_time_max,write_time,check_time,total_time_max, t_c\n";
+        std::cout << "algo,n,p,cutoff,threads,build_time,sort_time,merge_time,write_time,check_time,total_time,kernel_time\n";
         std::cout << "mpi,"
-                  << p.n_records << ","
-                  << p.payload_max << ","
-                  << p.cutoff << ","
-                  << p.n_threads << ","
-                  << t_build << ","
-                  << t_sort_max << ","
-                  << t_merge_max << ","
-                  << t_write << ","
-                  << t_check << ","
-                  << t_total_max << ","
-                  << t_c
-                  << "\n";
+                    << p.n_records << ","
+                    << p.payload_max << ","
+                    << p.cutoff << ","
+                    << p.n_threads << ","
+                    << t_build << ","
+                    << sort_time << ","
+                    << merge_time << ","
+                    << t_write << ","
+                    << t_check << ","
+                    << t_total_max << ","
+                    << kernel_time
+                    << "\n";
     }
 
     MPI_Type_free(&MPI_INDEXREC);

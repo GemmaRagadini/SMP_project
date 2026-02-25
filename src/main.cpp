@@ -110,8 +110,11 @@ int main(int argc, char** argv) {
 
     // CSV output
     static bool header_printed = false;
+    double merge_time = 0.0;
+    double kernel_time = t_build + t_sort + merge_time;
+
     if (!header_printed) {
-        std::cout << "algo,n,p,cutoff,threads,build_time,sort_time,write_time,check_time,total_time\n";
+        std::cout << "algo,n,p,cutoff,threads,build_time,sort_time,merge_time,write_time,check_time,total_time,kernel_time\n";
         header_printed = true;
     }
 
@@ -123,9 +126,7 @@ int main(int argc, char** argv) {
 #endif
     // per FastFlow ti interessa il parametro esplicito
     if (p.algo == "ff" && p.n_threads > 0) threads = (int)p.n_threads;
-    
-    double t_c = t_build + t_sort; // per confronto 
-    
+        
     std::cout
         << p.algo << ","
         << p.n_records << ","
@@ -134,9 +135,11 @@ int main(int argc, char** argv) {
         << threads << ","
         << t_build << ","
         << t_sort << ","
+        << merge_time << ","
         << t_write << ","
         << t_check << ","
-        << t_total
+        << t_total << ","
+        << kernel_time
         << "\n";
 
 #ifdef DEBUG_ORACLE

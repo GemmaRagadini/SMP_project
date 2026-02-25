@@ -1,29 +1,76 @@
 SPM Project 2 – Distributed out-of-core MergeSort
 
-Build All: 
-./scripts/build.sh All
+# Build:
+./scripts/build.sh 
 
-Build (Release):
-./scripts/build.sh Release
+# Single scripts/run
+./scripts/run.sh -a omp -n 200000 -p 256 -t 8
 
-Build (Debug):
-./scripts/build.sh Debug
+# Append su csv 
+./scripts/run.sh --append-csv results/single.csv -a seq -n 200000 -p 256
+./scripts/run.sh --append-csv results/single.csv -a omp -n 200000 -p 256 -t 8
+./scripts/run.sh --append-csv results/mpi.csv --np 8 -a mpi -n 200000 -p 256 -t 4
 
-Run (Release – default parameters):
-./scripts/run.sh
+# Test - con ripetizioni x media
+## Single node scaling
+result/single_node_scaling.csv 
 
-Run (Debug – default parameters):
-./scripts/run.sh Debug
+for rep in 1 2 3; do
+  ./scripts/run.sh --append-csv results/single_node_scaling.csv -a seq -n 200000 -p 256
+done
+for t in 1 2 4 8; do
+      for rep in 1 2 3; do
+            ./scripts/run.sh --append-csv results/single_node_scaling.csv -a omp -n 200000 -p 256 -t "$t"
+      done
+      for rep in 1 2 3; do
+            ./scripts/run.sh --append-csv results/single_node_scaling.csv -a ff  -n 200000 -p 256 -t "$t" -c 16384
+      done
+done
 
-Ex. Run with custom parameters (Release):
-./scripts/run.sh Release -a ff -t 16 -c 10000
 
-Ex. Run with custom parameters (Debug):
-./scripts/run.sh Debug -a omp -t 4
+## Size scaling 
+results/size_scaling.csv
 
-# run esperimenti senza modificare file
-BUILD_TYPE=Debug OUTDIR=myres ./scripts/run_experiments.sh
-N=20000000 P=32 THREADS=16 ./scripts/run_experiments.sh
+T=8
+for n in 50000 100000 200000 500000 1000000; do
+      for rep in 1 2 3; do
+            ./scripts/run.sh --append-csv results/size_scaling.csv -a seq -n "$n" -p 256
+      done 
+      for rep in 1 2 3; do
+            ./scripts/run.sh --append-csv results/size_scaling.csv -a omp -n "$n" -p 256 -t "$T"
+      done
+      for rep in 1 2 3; do
+            ./scripts/run.sh --append-csv results/size_scaling.csv -a ff  -n "$n" -p 256 -t "$T" -c 16384
+      done
+done
+
+## Payload sensitivity 
+results/payload_sensitivity.csv
+
+N=200000
+T=8
+for p in 0 8 32 256 1024; do
+      for reps in 1 2 3; do
+            ./scripts/run.sh --append-csv results/payload_sensitivity.csv -a seq -n "$N" -p "$p"
+      done
+      for reps in 1 2 3; do
+            ./scripts/run.sh --append-csv results/payload_sensitivity.csv -a omp -n "$N" -p "$p" -t "$T"
+      done
+      for reps in 1 2 3; do
+            ./scripts/run.sh --append-csv results/payload_sensitivity.csv -a ff  -n "$N" -p "$p" -t "$T" -c 16384
+      done
+done
+
+## MPI local test 
+results/mpi_local_test.csv 
+
+export OMP_NUM_THREADS=1
+for reps in 1 2 3; do
+      ./scripts/run.sh --append-csv results/mpi_local_test.csv --np 2 -a mpi -n 20000 -p 32 -t 1
+done 
+for reps in 1 2 3; do
+      ./scripts/run.sh --append-csv results/mpi_local_test.csv --np 4 -a mpi -n 20000 -p 32 -t 1
+done 
 
 Alorithms: 
 -a seq

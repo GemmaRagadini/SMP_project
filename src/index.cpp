@@ -1,12 +1,4 @@
-// Implementa:
-// scansione del file mmappato
-// costruzione dell’array/vector di IndexRec
-// aggiornamento progress gate (se presente)
-
-//per adesso lettura sequenziale 
-
 #include "index.hpp"
-
 #include <fstream> 
 #include <iostream>
 #include <stdexcept> 
@@ -192,36 +184,6 @@ static void merge_to (const std::vector<IndexRec>& src, std::vector<IndexRec>& d
       while (j < right) dst[k++] = src[j++];
 }
 
-
-// class SortWorker : public ff::ff_node_t<RangeTask> {
-//       public:
-//           explicit SortWorker(std::vector<IndexRec>* a) : a(a) {}
-      
-//           RangeTask* svc(RangeTask* t) override {
-//               std::sort(a->begin() + t->l, a->begin() + t->r, index_less);
-//               delete t;                          // <-- qui
-//               return (RangeTask*)ff::FF_GO_ON;      // <-- niente collector
-//           }
-      
-//       private:
-//           std::vector<IndexRec>* a;
-// };
-
-
-// class SortEmitter : public ff::ff_node_t<RangeTask> {
-//       public: 
-//             SortEmitter(std::size_t n, std::size_t block) : n(n), block(block) {}
-//             RangeTask* svc(RangeTask*) override {
-//                   for (std::size_t l = 0 ; l < n; l += block) {
-//                         std::size_t r = std::min(l + block, n); 
-//                         ff_send_out(new RangeTask{l, r});
-//                   }
-//                   return EOS;
-//             }
-//       private: 
-//             std::size_t n; 
-//             std::size_t block;
-// };
 
 
 void mergesort_index_ff(std::vector<IndexRec>& idx, std::size_t cutoff, std::size_t nw) {

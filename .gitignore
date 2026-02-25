@@ -1,9 +1,11 @@
-build-debug/
-build-release/
+build/
 *.o
 *.out
 .vscode
-data/*.bin
-results/*
+data/
+results/
 !results/.gitkeep
 mynotes.txt
+venv/
+scripts/experiments/
+images/
