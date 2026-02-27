@@ -65,13 +65,17 @@ done
 results/mpi_local_test.csv 
 
 export OMP_NUM_THREADS=1
-for reps in 1 2 3; do
-      ./scripts/run.sh --append-csv results/mpi_local_test.csv --np 2 -a mpi -n 20000 -p 32 -t 1
-done 
-for reps in 1 2 3; do
-      ./scripts/run.sh --append-csv results/mpi_local_test.csv --np 4 -a mpi -n 20000 -p 32 -t 1
-done 
+for np in 1 2 3 4 5 6 7 8; do
+      for reps in 1 2 3; do
+            ./scripts/run.sh --append-csv results/mpi_local_test.csv --np 2 -a mpi -n 20000 -p 32 -t 1
+      done 
+      for reps in 1 2 3; do
+            ./scripts/run.sh --append-csv results/mpi_local_test.csv --np 4 -a mpi -n 20000 -p 32 -t 1
+      done 
+done
 
+
+# MPI local test fatto = > ora modificare codice e creare grafico 
 Alorithms: 
 -a seq
 -a omp

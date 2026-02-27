@@ -24,18 +24,18 @@ int main(int argc, char** argv) {
     if (p.algo == "mpi") {
         MPI_Init(&argc, &argv);
 
-        int rank = 0, size = 1;
+        MPI_Comm_size(MPI_COMM_WORLD, &p.np);
+        int rank = 0;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-        MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-        if (rank == 0) {
-            std::cout << "MergeSort (MPI+OMP)\n";
-            std::cout << "ranks       : " << size << "\n";
-            std::cout << "records     : " << p.n_records   << "\n";
-            std::cout << "payload_max : " << p.payload_max << "\n";
-            std::cout << "threads/rank: " << p.n_threads   << "\n";
-            std::cout << "cutoff      : " << p.cutoff      << "\n";
-        }
+        // if (rank == 0) {
+        //     std::cout << "MergeSort (MPI+OMP)\n";
+        //     std::cout << "ranks       : " << size << "\n";
+        //     std::cout << "records     : " << p.n_records   << "\n";
+        //     std::cout << "payload_max : " << p.payload_max << "\n";
+        //     std::cout << "threads/rank: " << p.n_threads   << "\n";
+        //     std::cout << "cutoff      : " << p.cutoff      << "\n";
+        // }
 
         int rc = run_mpi(p);
         MPI_Finalize();
@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
     double kernel_time = t_build + t_sort + merge_time;
 
     if (!header_printed) {
-        std::cout << "algo,n,p,cutoff,threads,build_time,sort_time,merge_time,write_time,check_time,total_time,kernel_time\n";
+        std::cout << "algo,n,p,cutoff,threads,np,build_time,sort_time,merge_time,write_time,check_time,total_time,kernel_time\n";
         header_printed = true;
     }
 
@@ -133,6 +133,7 @@ int main(int argc, char** argv) {
         << p.payload_max << ","
         << p.cutoff << ","
         << threads << ","
+        << p.np << ","
         << t_build << ","
         << t_sort << ","
         << merge_time << ","

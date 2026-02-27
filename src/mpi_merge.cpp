@@ -282,12 +282,13 @@ int run_mpi(const Params& p) {
     double kernel_time = t_build + sort_time + merge_time;
 
     if (rank == 0) {
-        std::cout << "algo,n,p,cutoff,threads,build_time,sort_time,merge_time,write_time,check_time,total_time,kernel_time\n";
+        std::cout << "algo,n,p,cutoff,threads,np,build_time,sort_time,merge_time,write_time,check_time,total_time,kernel_time\n";
         std::cout << "mpi,"
                     << p.n_records << ","
                     << p.payload_max << ","
                     << p.cutoff << ","
                     << p.n_threads << ","
+                    << p.np << ","
                     << t_build << ","
                     << sort_time << ","
                     << merge_time << ","

@@ -1,12 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Uso:
-#   ./run.sh [--builddir build] [-a seq|omp|ff|mpi ...]
-#   ./run.sh --append-csv results.csv -a omp -n 100000 -p 256 -t 8
-#   ./run.sh --np 8 -a mpi -n 1000000 -p 256 -t 4
-#
-# Build dir default: build
+
 BUILD_DIR="build"
 APPEND_CSV=""
 
@@ -98,11 +93,13 @@ append_csv() {
   rm -f "$tmp.filtered"
 }
 
-# --- launcher MPI: se sei sotto Slurm usa srun, altrimenti mpirun/mpiexec ---
 run_mpi() {
   if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     # -n = ranks
-    srun -n "$NP" "$EXEC" "${ARGS[@]}"
+    srun -n "$NP" \
+     --ntasks-per-node=1 \
+     -c "${SLURM_CPUS_PER_TASK:-1}" \
+     "$EXEC" "${ARGS[@]}"
   else
     MPI_LAUNCHER="${MPIEXEC:-mpirun}"
     if [[ "$MPI_LAUNCHER" =~ ^[[:space:]]*mpirun(\ |$) ]] || [[ "$MPI_LAUNCHER" =~ ^[[:space:]]*mpiexec(\ |$) ]]; then
