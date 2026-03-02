@@ -16,7 +16,6 @@ Params parse_argv(int argc, char** argv) {
                   << "  -r N      number of records\n"
                   << "  -p B      maximum payload size in bytes, B>=8\n"
                   << "  -t T      threads to use\n"
-                  << "  -c C      cutoff\n "
                   << "  -h        show this help\n";
             exit(1);
       };
@@ -36,7 +35,6 @@ Params parse_argv(int argc, char** argv) {
                         << "  -r N      number of records\n"
                         << "  -p B      maximum payload size in bytes, B>=8\n"
                         << "  -t T      threads to use\n"
-                        << "  -c C      cutoff\n "
                         << "  -h        show this help\n";
                   exit(0);
             }
@@ -75,12 +73,6 @@ Params parse_argv(int argc, char** argv) {
                   } else {
                         die("Invalid -a value " + v);
                   }
-            }
-            else if (a == "-c") {
-                  string v = need_value(a);
-                  try { p.cutoff = static_cast<size_t>(stoull(v)); }
-                  catch (...) { die("Invalid -c value: " + v); }
-                  if (p.cutoff < 1) die("-c must be > 0");
             }
             else {
                   die("Unknown option: " + a);

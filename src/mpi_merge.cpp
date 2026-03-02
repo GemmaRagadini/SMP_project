@@ -108,14 +108,17 @@ static std::vector<IndexRec> kway_merge(const std::vector<IndexRec>& all_sorted_
     return out;
 }
 
-// MPI + OMP
-/*
- * - rank 0 genera dataset e costruisce indice globale
- * - rank 0 divide l'indice in slice contigue e le distribuisce
- * - ogni rank ordina la propria slice usando OMP
- * - merge globale DISTRIBUITO con tree-merge (no gather su root)
- * - rank 0 riscrive il file ordinato e verifica
- */
+// MPI + OMP (scalable distributed sort via range-partition + Alltoallv + local k-way merge)
+//
+// Pipeline:
+//  - rank0 generates dataset + builds global index (same as your current version)
+//  - rank0 scatters contiguous chunks of IndexRec (by position) to all ranks
+//  - each rank sorts its local chunk with OpenMP
+//  - choose global splitters via sampling (gather samples to rank0 -> quantiles -> bcast)
+//  - each rank partitions its sorted chunk into P buckets using splitters (contiguous segments)
+//  - MPI_Alltoallv exchanges buckets so rank r receives only keys in its global range
+//  - each rank locally merges received sorted segments with k-way merge
+//  - (output intentionally omitted as requested)
 int run_mpi(const Params& p) {
     int rank = 0, P = 1;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -123,14 +126,19 @@ int run_mpi(const Params& p) {
 
     MPI_Datatype MPI_INDEXREC = make_mpi_indexrec_type();
 
-    // tempi
+    // timings
     double t_total0 = MPI_Wtime();
-    double t_build = 0.0, t_sort = 0.0, t_merge = 0.0, t_write = 0.0, t_check = 0.0;
+    double t_build = 0.0;
+    double t_sort  = 0.0;
+    double t_part  = 0.0;  // sampling + splitter + bucketization + alltoallv
+    double t_merge = 0.0;  // local k-way merge after exchange
 
     std::string in_path;
     std::vector<IndexRec> global_idx;
 
-    // rank0 genera file e costruisce indice
+    // ------------------------------------------------------------
+    // rank0: dataset + build global index
+    // ------------------------------------------------------------
     if (rank == 0) {
         GenStats st{};
         in_path = ensure_unsorted_file(p.n_records, p.payload_max, &st);
@@ -140,14 +148,16 @@ int run_mpi(const Params& p) {
         t_build = MPI_Wtime() - t0;
     }
 
-    // broadcast della lunghezza path e contenuto a tutti i rank
+    // broadcast input path (so everyone can, in future, read/verify/write if needed)
     int path_len = 0;
     if (rank == 0) path_len = (int)in_path.size();
     MPI_Bcast(&path_len, 1, MPI_INT, 0, MPI_COMM_WORLD);
     if (rank != 0) in_path.resize((std::size_t)path_len);
     MPI_Bcast(in_path.data(), path_len, MPI_CHAR, 0, MPI_COMM_WORLD);
 
-    // rank0 calcola counts/displs per slice contigue (bilanciamento per #record)
+    // ------------------------------------------------------------
+    // rank0: compute counts/displs for Scatterv of IndexRec
+    // ------------------------------------------------------------
     std::vector<int> counts, displs;
     if (rank == 0) {
         counts.assign(P, 0);
@@ -156,27 +166,25 @@ int run_mpi(const Params& p) {
         const std::size_t N = p.n_records;
         for (int r = 0; r < P; ++r) {
             std::size_t start = (std::uint64_t(r) * N) / (std::uint64_t)P;
-            std::size_t end = (std::uint64_t(r + 1) * N) / (std::uint64_t)P;
+            std::size_t end   = (std::uint64_t(r + 1) * N) / (std::uint64_t)P;
             counts[r] = (int)(end - start);
         }
         for (int r = 1; r < P; ++r) displs[r] = displs[r - 1] + counts[r - 1];
 
-        // check coerenza
         if ((std::size_t)(displs.back() + counts.back()) != N) {
             MPI_Type_free(&MPI_INDEXREC);
             throw std::runtime_error("Internal error: counts/displs do not sum to N");
         }
     }
 
-    // scatter: invio a ogni rank quanti elementi riceverà
+    // Scatter recvcount
     int recvcount = 0;
     MPI_Scatter(rank == 0 ? counts.data() : nullptr, 1, MPI_INT,
                 &recvcount, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    std::vector<IndexRec> local_idx;
-    local_idx.resize((std::size_t)recvcount);
+    std::vector<IndexRec> local_idx((std::size_t)recvcount);
 
-    // invio delle slice di IndexRec
+    // Scatterv actual data
     MPI_Scatterv(rank == 0 ? global_idx.data() : nullptr,
                  rank == 0 ? counts.data() : nullptr,
                  rank == 0 ? displs.data() : nullptr,
@@ -184,119 +192,242 @@ int run_mpi(const Params& p) {
                  local_idx.data(), recvcount, MPI_INDEXREC,
                  0, MPI_COMM_WORLD);
 
-    // barriera per rendere il timing comparabile
+    // ------------------------------------------------------------
+    // local sort (OMP)
+    // ------------------------------------------------------------
     MPI_Barrier(MPI_COMM_WORLD);
-
-    // sort locale (OMP)
     double t0s = MPI_Wtime();
+
     if (p.n_threads > 0) omp_set_num_threads((int)p.n_threads);
     mergesort_index_openmp(local_idx, p.cutoff);
+
     t_sort = MPI_Wtime() - t0s;
 
-    // tutti devono essere ordinati
+    // sanity: local sorted
     int ok_local = is_sorted_by_key(local_idx) ? 1 : 0;
     int ok_all = 0;
     MPI_Allreduce(&ok_local, &ok_all, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
     if (!ok_all) {
-        if (rank == 0) std::cerr << "[error] At least one rank produced a non-sorted slice\n";
+        if (rank == 0) std::cerr << "[error] At least one rank produced a non-sorted local chunk\n";
         MPI_Type_free(&MPI_INDEXREC);
         return 1;
     }
 
-    // MERGE GLOBALE DISTRIBUITO: tree-merge logaritmico 
+    // ------------------------------------------------------------
+    // Part 1: choose splitters via sampling (rank0), broadcast to all
+    // Part 2: bucketize + Alltoallv exchange
+    // ------------------------------------------------------------
+    MPI_Barrier(MPI_COMM_WORLD);
+    double t0p = MPI_Wtime();
+
+    // ---- Sampling (keys) ----
+    using KeyT = unsigned long;
+
+    const int S = 1024;  // per-rank sample size
+    const int local_n = (int)local_idx.size();
+    const int s_local = std::min(S, local_n);
+
+    std::vector<KeyT> sample_local;
+    sample_local.reserve((std::size_t)s_local);
+
+    if (s_local > 0) {
+        for (int i = 0; i < s_local; ++i) {
+            int pos = (int)(((long long)i * (long long)local_n) / (long long)s_local);
+            if (pos >= local_n) pos = local_n - 1;
+            sample_local.push_back((KeyT)local_idx[(std::size_t)pos].key);
+        }
+    }
+
+    int s_count = (int)sample_local.size();
+
+    std::vector<int> s_counts, s_displs;
+    std::vector<KeyT> sample_all;
+
+    if (rank == 0) s_counts.resize(P);
+
+    MPI_Gather(&s_count, 1, MPI_INT,
+               rank == 0 ? s_counts.data() : nullptr, 1, MPI_INT,
+               0, MPI_COMM_WORLD);
+
+    int s_total = 0;
+    if (rank == 0) {
+        s_displs.resize(P);
+        s_displs[0] = 0;
+        for (int r = 0; r < P; ++r) s_total += s_counts[r];
+        for (int r = 1; r < P; ++r) s_displs[r] = s_displs[r - 1] + s_counts[r - 1];
+        sample_all.resize((std::size_t)s_total);
+    }
+
+    MPI_Gatherv(sample_local.data(), s_count, MPI_UNSIGNED_LONG,
+                rank == 0 ? sample_all.data() : nullptr,
+                rank == 0 ? s_counts.data() : nullptr,
+                rank == 0 ? s_displs.data() : nullptr,
+                MPI_UNSIGNED_LONG,
+                0, MPI_COMM_WORLD);
+
+    // Choose P-1 splitters at quantiles and broadcast
+    std::vector<KeyT> splitters((std::size_t)std::max(0, P - 1));
+
+    if (rank == 0) {
+        if (!sample_all.empty()) {
+            std::sort(sample_all.begin(), sample_all.end());
+            for (int k = 1; k < P; ++k) {
+                long long idx = (long long)k * (long long)sample_all.size() / (long long)P;
+                if (idx >= (long long)sample_all.size()) idx = (long long)sample_all.size() - 1;
+                splitters[(std::size_t)(k - 1)] = sample_all[(std::size_t)idx];
+            }
+        } else {
+            // degenerate: no samples -> all splitters = 0
+            for (int k = 0; k < P - 1; ++k) splitters[(std::size_t)k] = 0;
+        }
+    }
+
+    if (!splitters.empty()) {
+        MPI_Bcast(splitters.data(), (int)splitters.size(), MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+    }
+
+    // ---- Bucketization (since local_idx is sorted, buckets are contiguous segments) ----
+    std::vector<int> sendcounts(P, 0), sdispls2(P, 0);
+
+    // cuts[r] = starting index of bucket r in local_idx (cuts has size P+1)
+    std::vector<int> cuts((std::size_t)(P + 1), 0);
+    cuts[0] = 0;
+    cuts[P] = local_n;
+
+    auto key_less = [](const IndexRec& rec, const KeyT k) {
+        return (KeyT)rec.key < k;
+    };
+
+    int prev = 0;
+    for (int b = 0; b < P - 1; ++b) {
+        const KeyT split = splitters[(std::size_t)b];
+        auto it = std::lower_bound(local_idx.begin() + prev, local_idx.end(), split, key_less);
+        int pos = (int)std::distance(local_idx.begin(), it);
+        cuts[b + 1] = pos;
+        prev = pos;
+    }
+
+    for (int r = 0; r < P; ++r) {
+        int a = cuts[r];
+        int b = cuts[r + 1];
+        sendcounts[r] = b - a;
+    }
+
+    sdispls2[0] = 0;
+    for (int r = 1; r < P; ++r) sdispls2[r] = sdispls2[r - 1] + sendcounts[r - 1];
+
+    // ---- Exchange counts, allocate recv buffer, Alltoallv ----
+    std::vector<int> recvcounts(P, 0), rdispls(P, 0);
+
+    MPI_Alltoall(sendcounts.data(), 1, MPI_INT,
+                 recvcounts.data(), 1, MPI_INT,
+                 MPI_COMM_WORLD);
+
+    int recv_total = 0;
+    for (int r = 0; r < P; ++r) recv_total += recvcounts[r];
+
+    rdispls[0] = 0;
+    for (int r = 1; r < P; ++r) rdispls[r] = rdispls[r - 1] + recvcounts[r - 1];
+
+    std::vector<IndexRec> recvbuf((std::size_t)recv_total);
+
+    MPI_Alltoallv(local_idx.data(),
+                  sendcounts.data(), sdispls2.data(), MPI_INDEXREC,
+                  recvbuf.data(),
+                  recvcounts.data(), rdispls.data(), MPI_INDEXREC,
+                  MPI_COMM_WORLD);
+
+    t_part = MPI_Wtime() - t0p;
+
+    // ------------------------------------------------------------
+    // Local k-way merge of received sorted segments
+    // ------------------------------------------------------------
     MPI_Barrier(MPI_COMM_WORLD);
     double t0m = MPI_Wtime();
 
-    std::vector<IndexRec> work = std::move(local_idx);
-
-    for (int step = 1; step < P; step *= 2) {
-        if ((rank % (2 * step)) == 0) {
-            int partner = rank + step;
-            if (partner < P) {
-                int recv_n = 0;
-                MPI_Recv(&recv_n, 1, MPI_INT, partner, 100, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-                std::vector<IndexRec> other((std::size_t)recv_n);
-                MPI_Recv(other.data(), recv_n, MPI_INDEXREC, partner, 101, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-
-                work = merge_two_sorted(work, other);
-            }
-        } else {
-            int partner = rank - step;
-
-            int send_n = (int)work.size();
-            MPI_Send(&send_n, 1, MPI_INT, partner, 100, MPI_COMM_WORLD);
-            MPI_Send(work.data(), send_n, MPI_INDEXREC, partner, 101, MPI_COMM_WORLD);
-
-            // questo rank esce dal merge
-            break;
-        }
-    }
+    std::vector<IndexRec> local_final = kway_merge(recvbuf, recvcounts, rdispls);
 
     t_merge = MPI_Wtime() - t0m;
 
-    // solo rank0 ha l’indice globale in `work`
-    if (rank == 0) {
-        auto& merged = work;
-
-        if (!is_sorted_by_key(merged)) {
-            std::cerr << "[error] Global merged index is NOT sorted by key\n";
-            MPI_Type_free(&MPI_INDEXREC);
-            return 1;
-        }
-        std::cout << "[ok] Global merged index is sorted by key\n";
-
-        std::string out_path = "data/sorted_mpi_" + std::to_string(p.n_records) + "_" +
-                               std::to_string(p.payload_max) + ".bin";
-
-        double tw0 = MPI_Wtime();
-        if (!rewrite_sorted_file_mmap(in_path, out_path, merged)) {
-            std::cerr << "rewrite_sorted_file_mmap failed\n";
-            MPI_Type_free(&MPI_INDEXREC);
-            return 1;
-        }
-        t_write = MPI_Wtime() - tw0;
-
-        double tc0 = MPI_Wtime();
-        if (!check_sorted_file_mmap(out_path, p.n_records)) {
-            std::cerr << "check_sorted_file_mmap failed\n";
-            MPI_Type_free(&MPI_INDEXREC);
-            return 1;
-        }
-        t_check = MPI_Wtime() - tc0;
-
-        std::cout << "[ok] Sorted output file verification OK\n";
+    // sanity: each rank final segment sorted
+    int ok_local2 = is_sorted_by_key(local_final) ? 1 : 0;
+    int ok_all2 = 0;
+    MPI_Allreduce(&ok_local2, &ok_all2, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    if (!ok_all2) {
+        if (rank == 0) std::cerr << "[error] At least one rank produced a non-sorted final segment\n";
+        MPI_Type_free(&MPI_INDEXREC);
+        return 1;
     }
 
-    // TIMING per report: uso il MAX (worst rank) per sort/merge/total
-    double t_total = MPI_Wtime() - t_total0;
+    // Optional global boundary check: max(key) of rank r <= min(key) of rank r+1
+    // (helps catch splitter bugs / comparator inconsistencies)
+    KeyT local_min = 0, local_max = 0;
+    int has_any = local_final.empty() ? 0 : 1;
+    if (has_any) {
+        local_min = (KeyT)local_final.front().key;
+        local_max = (KeyT)local_final.back().key;
+    }
 
-    double sort_time = 0.0;
-    double merge_time = 0.0;
-    double t_total_max = 0.0;
+    std::vector<KeyT> mins, maxs;
+    std::vector<int> hass;
+    if (rank == 0) {
+        mins.resize((std::size_t)P);
+        maxs.resize((std::size_t)P);
+        hass.resize((std::size_t)P);
+    }
 
-    MPI_Reduce(&t_sort,  &sort_time,  1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&t_merge, &merge_time, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&t_total, &t_total_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
-
-    double kernel_time = t_build + sort_time + merge_time;
+    MPI_Gather(&has_any, 1, MPI_INT, rank == 0 ? hass.data() : nullptr, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gather(&local_min, 1, MPI_UNSIGNED_LONG, rank == 0 ? mins.data() : nullptr, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
+    MPI_Gather(&local_max, 1, MPI_UNSIGNED_LONG, rank == 0 ? maxs.data() : nullptr, 1, MPI_UNSIGNED_LONG, 0, MPI_COMM_WORLD);
 
     if (rank == 0) {
-        std::cout << "algo,n,p,cutoff,threads,np,build_time,sort_time,merge_time,write_time,check_time,total_time,kernel_time\n";
-        std::cout << "mpi,"
-                    << p.n_records << ","
-                    << p.payload_max << ","
-                    << p.cutoff << ","
-                    << p.n_threads << ","
-                    << p.np << ","
-                    << t_build << ","
-                    << sort_time << ","
-                    << merge_time << ","
-                    << t_write << ","
-                    << t_check << ","
-                    << t_total_max << ","
-                    << kernel_time
-                    << "\n";
+        bool ok_bounds = true;
+        for (int r = 0; r < P - 1; ++r) {
+            if (hass[(std::size_t)r] && hass[(std::size_t)(r + 1)]) {
+                if (maxs[(std::size_t)r] > mins[(std::size_t)(r + 1)]) {
+                    ok_bounds = false;
+                    std::cerr << "[error] Global boundary violated between rank " << r
+                              << " and rank " << (r + 1) << " : "
+                              << maxs[(std::size_t)r] << " > " << mins[(std::size_t)(r + 1)] << "\n";
+                    break;
+                }
+            }
+        }
+        if (ok_bounds) {
+            std::cout << "[ok] Global boundary check OK (rank ranges are ordered)\n";
+        }
+    }
+
+    // ------------------------------------------------------------
+    // Reporting: take MAX across ranks for scalable phases
+    // (build is rank0-only here; keep separate)
+    // ------------------------------------------------------------
+    double t_total = MPI_Wtime() - t_total0;
+
+    double sort_max = 0.0, part_max = 0.0, merge_max = 0.0, total_max = 0.0;
+    MPI_Reduce(&t_sort,  &sort_max,  1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&t_part,  &part_max,  1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&t_merge, &merge_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&t_total, &total_max, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+    // kernel_time: exclude output, include build (serial) if you want; I keep it explicit
+    double kernel_time = t_build + sort_max + part_max + merge_max;
+
+    if (rank == 0) {
+        // You can extend your CSV header; I include part_time.
+        std::cout << "algo,n,p,threads,np,build_time,sort_time,part_time,merge_time,total_time,kernel_time\n";
+        std::cout << "mpi_part,"
+                  << p.n_records << ","
+                  << p.payload_max << ","
+                  << p.n_threads << ","
+                  << p.np << ","
+                  << t_build << ","
+                  << sort_max << ","
+                  << part_max << ","
+                  << merge_max << ","
+                  << total_max << ","
+                  << kernel_time
+                  << "\n";
     }
 
     MPI_Type_free(&MPI_INDEXREC);

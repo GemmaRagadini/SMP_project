@@ -7,7 +7,6 @@
 #include <vector>
 #include <omp.h>
 #include <ff/ff.hpp>          
-#include <ff/farm.hpp> 
 #include <ff/parallel_for.hpp> 
 #include <cstring>
 #include <sys/mman.h>
@@ -120,7 +119,6 @@ static void mergesort_rec(std::vector<IndexRec>& a, std::vector<IndexRec>& tmp, 
       const std::size_t mid = left + n / 2; 
       mergesort_rec(a,tmp, left, mid); 
       mergesort_rec(a, tmp, mid, right); 
-      // if(!index_less(a[mid], a[mid -1])) return; // se già in ordine
       merge_range(a,tmp, left, mid, right);
 }
 
@@ -158,12 +156,6 @@ void mergesort_index_seq(std::vector<IndexRec>& idx) {
 }
 
 
-//FASTFLOW  
-
-// struct RangeTask {
-//       std::size_t l; 
-//       std::size_t r;
-// }; 
 
 static void merge_to (const std::vector<IndexRec>& src, std::vector<IndexRec>& dst, std::size_t left, std::size_t mid, std::size_t right) {
       //mergia src[left:min) e strc[mid, right) in dtf[left:right]

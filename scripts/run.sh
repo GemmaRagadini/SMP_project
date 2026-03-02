@@ -1,34 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-
 BUILD_DIR="build"
 APPEND_CSV=""
 
 ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --builddir) BUILD_DIR="$2"; shift 2;;
-    --append-csv) APPEND_CSV="$2"; shift 2;;
-    *) ARGS+=("$1"); shift;;
+    --builddir)     BUILD_DIR="$2"; shift 2;;
+    --append-csv)   APPEND_CSV="$2"; shift 2;;
+    *)              ARGS+=("$1"); shift;;
   esac
 done
 
 EXEC="$BUILD_DIR/sorter"
 
 if [[ ! -x "$EXEC" ]]; then
-  echo "Executable not found: $EXEC"
-  echo "Build it first with: ./build.sh"
+  echo "Executable not found: $EXEC" >&2
+  echo "Build it first with: ./build.sh" >&2
   exit 1
 fi
 
-# Default parametri 
-DEFAULT_N=10000
-DEFAULT_P=32
+# Default parametri
+DEFAULT_N=100000
+DEFAULT_P=256
 DEFAULT_A=seq
-DEFAULT_T=4
-DEFAULT_C=16384
-DEFAULT_RANKS=4
+DEFAULT_T=1
 
 has_flag () {
   local flag="$1"
@@ -57,74 +54,49 @@ if ! has_flag "-t" && [[ "$algo" != "seq" ]]; then
   ARGS+=("-t" "$DEFAULT_T")
 fi
 
-# Default -c if missing and algo ff
-if ! has_flag "-c" && [[ "$algo" == "ff" ]]; then
-  ARGS+=("-c" "$DEFAULT_C")
-fi
-
-# MPI ranks via --np (come il tuo)
-NP="$DEFAULT_RANKS"
-for ((i=0; i<${#ARGS[@]}; i++)); do
-  if [[ "${ARGS[i]}" == "--np" && $((i+1)) -lt ${#ARGS[@]} ]]; then
-    NP="${ARGS[i+1]}"
-    unset 'ARGS[i]'
-    unset 'ARGS[i+1]'
-    ARGS=("${ARGS[@]}")
-    break
-  fi
-done
-
-# --- CSV append helper (prende header + righe algo, evita header duplicati) ---
+# --- CSV append helper (come prima, robusto) ---
 append_csv() {
   local tmp="$1"
   local dst="$2"
 
-  # filtra solo righe CSV attese: header o "algo,..."
   awk -F',' '
-    /^algo,/ {print; next}
-    /^[a-z]+,[0-9]+,/ {print}
+    /^algo[[:space:]]*,/ {print; next}
+    /^[a-zA-Z_]+[[:space:]]*,[[:space:]]*[0-9]+/ {print}
   ' "$tmp" > "$tmp.filtered"
+
+  if [[ ! -s "$tmp.filtered" ]]; then
+    echo "[warn] No CSV lines detected in program output (see raw output below):" >&2
+    cat "$tmp" >&2
+    rm -f "$tmp.filtered"
+    return 0
+  fi
 
   if [[ ! -s "$dst" ]]; then
     cat "$tmp.filtered" >> "$dst"
   else
-    grep -v '^algo,' "$tmp.filtered" >> "$dst"
+    awk -F',' '$1!="algo"{print}' "$tmp.filtered" >> "$dst"
   fi
+
   rm -f "$tmp.filtered"
 }
 
-run_mpi() {
-  if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-    # -n = ranks
-    srun -n "$NP" \
-     --ntasks-per-node=1 \
-     -c "${SLURM_CPUS_PER_TASK:-1}" \
-     "$EXEC" "${ARGS[@]}"
-  else
-    MPI_LAUNCHER="${MPIEXEC:-mpirun}"
-    if [[ "$MPI_LAUNCHER" =~ ^[[:space:]]*mpirun(\ |$) ]] || [[ "$MPI_LAUNCHER" =~ ^[[:space:]]*mpiexec(\ |$) ]]; then
-      $MPI_LAUNCHER -np "$NP" "$EXEC" "${ARGS[@]}"
-    else
-      $MPI_LAUNCHER "$EXEC" "${ARGS[@]}"
-    fi
-  fi
-}
-
+# --- Main dispatch (solo seq/omp/ff) ---
+# Se qualcuno passa -a mpi, falliamo esplicitamente: MPI va lanciato dallo strong script con srun.
+if [[ "$algo" == "mpi" ]]; then
+  echo "[error] algo=mpi not supported in run.sh anymore. Use the strong/weak scripts with srun." >&2
+  exit 2
+fi
 
 if [[ -z "$APPEND_CSV" ]]; then
-  if [[ "$algo" == "mpi" ]]; then
-    run_mpi
-  else
-    "$EXEC" "${ARGS[@]}"
-  fi
+  "$EXEC" "${ARGS[@]}"
   exit 0
 else
   tmp="$(mktemp)"
-  if [[ "$algo" == "mpi" ]]; then
-    ( run_mpi ) &> "$tmp"
-  else
-    ( "$EXEC" "${ARGS[@]}" ) &> "$tmp"
-  fi
+  ( "$EXEC" "${ARGS[@]}" ) &> "$tmp" || {
+    echo "[run.sh] sorter failed (algo=$algo). Raw output saved in: $tmp" >&2
+    cat "$tmp" >&2
+    exit 1
+  }
   append_csv "$tmp" "$APPEND_CSV"
   rm -f "$tmp"
   echo "[ok] appended CSV -> $APPEND_CSV"

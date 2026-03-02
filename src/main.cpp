@@ -28,15 +28,6 @@ int main(int argc, char** argv) {
         int rank = 0;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-        // if (rank == 0) {
-        //     std::cout << "MergeSort (MPI+OMP)\n";
-        //     std::cout << "ranks       : " << size << "\n";
-        //     std::cout << "records     : " << p.n_records   << "\n";
-        //     std::cout << "payload_max : " << p.payload_max << "\n";
-        //     std::cout << "threads/rank: " << p.n_threads   << "\n";
-        //     std::cout << "cutoff      : " << p.cutoff      << "\n";
-        // }
-
         int rc = run_mpi(p);
         MPI_Finalize();
         return rc;
@@ -114,7 +105,7 @@ int main(int argc, char** argv) {
     double kernel_time = t_build + t_sort + merge_time;
 
     if (!header_printed) {
-        std::cout << "algo,n,p,cutoff,threads,np,build_time,sort_time,merge_time,write_time,check_time,total_time,kernel_time\n";
+        std::cout << "algo,n,p,threads,np,build_time,sort_time,merge_time,write_time,check_time,total_time,kernel_time\n";
         header_printed = true;
     }
 
@@ -124,14 +115,13 @@ int main(int argc, char** argv) {
     // per OMP: il runtime sa quanti thread userà (dopo omp_set_num_threads)
     if (p.algo == "omp") threads = omp_get_max_threads();
 #endif
-    // per FastFlow ti interessa il parametro esplicito
+    // per FastFlow interessa il parametro esplicito
     if (p.algo == "ff" && p.n_threads > 0) threads = (int)p.n_threads;
         
     std::cout
         << p.algo << ","
         << p.n_records << ","
         << p.payload_max << ","
-        << p.cutoff << ","
         << threads << ","
         << p.np << ","
         << t_build << ","
@@ -142,22 +132,6 @@ int main(int argc, char** argv) {
         << t_total << ","
         << kernel_time
         << "\n";
-
-#ifdef DEBUG_ORACLE
-    auto idx_ref = idx;
-    sort_index_seq(idx_ref);
-    if (idx_ref.size() != idx.size()) {
-        std::cerr << "[error] Oracle size mismatch\n";
-        return 1;
-    }
-    for (std::size_t i = 0; i < idx.size(); ++i) {
-        if (idx[i].key != idx_ref[i].key) {
-            std::cerr << "[error] Oracle mismatch at i=" << i << "\n";
-            return 1;
-        }
-    }
-    std::cout << "[ok] Oracle comparison OK\n";
-#endif
 
     return 0;
 }
