@@ -1,82 +1,81 @@
-SPM Project 2 – Distributed out-of-core MergeSort
+# Distributed out-of-core MergeSort (Index-based)
 
-# Build:
-./scripts/build.sh 
+This project implements an **out-of-core MergeSort** for a binary dataset made of **variable-length records**.  
+The dataset can exceed RAM; therefore records are **not sorted in-place**. Instead, the program builds an
+**in-memory index** of `(key, offset, len)` tuples, sorts the index, and finally rewrites the output file
+by copying records in sorted order.
 
-# Single scripts/run
-./scripts/run.sh -a omp -n 200000 -p 256 -t 8
+The project includes:
+- **Single-node** implementations:
+  - `seq` : sequential baseline (top-down mergesort)
+  - `omp` : OpenMP task-based mergesort with cutoff
+  - `ff`  : FastFlow `ParallelFor` (block sort + iterative merges)
+- **Hybrid distributed** implementation:
+  - `mpi` : MPI + OpenMP range-partitioning (scatter + local sort + sampling splitters + alltoallv + local k-way merge)
 
-# Append su csv 
-./scripts/run.sh --append-csv results/single.csv -a seq -n 200000 -p 256
-./scripts/run.sh --append-csv results/single.csv -a omp -n 200000 -p 256 -t 8
-./scripts/run.sh --append-csv results/mpi.csv --np 8 -a mpi -n 200000 -p 256 -t 4
+## Data format
 
-# Test - con ripetizioni x media
-## Single node scaling
-result/single_node_scaling.csv 
+Each record in the input file is:
+- `key` : `unsigned long` (8 bytes on 64-bit platforms) — sorting key
+- `len` : `uint32_t` — payload length
+- `payload[len]` : arbitrary bytes
 
-for rep in 1 2 3; do
-  ./scripts/run.sh --append-csv results/single_node_scaling.csv -a seq -n 200000 -p 256
-done
-for t in 1 2 4 8; do
-      for rep in 1 2 3; do
-            ./scripts/run.sh --append-csv results/single_node_scaling.csv -a omp -n 200000 -p 256 -t "$t"
-      done
-      for rep in 1 2 3; do
-            ./scripts/run.sh --append-csv results/single_node_scaling.csv -a ff  -n 200000 -p 256 -t "$t" -c 16384
-      done
-done
+The in-memory index is:
+- `key`
+- `offset` (byte offset of the record in the file)
+- `len`
 
+The comparator uses **(key, offset)** to ensure deterministic ordering with duplicate keys.
 
-## Size scaling 
-results/size_scaling.csv
+## Repository structure (typical)
 
-T=8
-for n in 50000 100000 200000 500000 1000000; do
-      for rep in 1 2 3; do
-            ./scripts/run.sh --append-csv results/size_scaling.csv -a seq -n "$n" -p 256
-      done 
-      for rep in 1 2 3; do
-            ./scripts/run.sh --append-csv results/size_scaling.csv -a omp -n "$n" -p 256 -t "$T"
-      done
-      for rep in 1 2 3; do
-            ./scripts/run.sh --append-csv results/size_scaling.csv -a ff  -n "$n" -p 256 -t "$T" -c 16384
-      done
-done
-
-## Payload sensitivity 
-results/payload_sensitivity.csv
-
-N=200000
-T=8
-for p in 0 8 32 256 1024; do
-      for reps in 1 2 3; do
-            ./scripts/run.sh --append-csv results/payload_sensitivity.csv -a seq -n "$N" -p "$p"
-      done
-      for reps in 1 2 3; do
-            ./scripts/run.sh --append-csv results/payload_sensitivity.csv -a omp -n "$N" -p "$p" -t "$T"
-      done
-      for reps in 1 2 3; do
-            ./scripts/run.sh --append-csv results/payload_sensitivity.csv -a ff  -n "$N" -p "$p" -t "$T" -c 16384
-      done
-done
-
-## MPI local test 
-results/mpi_local_test.csv 
-
-export OMP_NUM_THREADS=1
-for np in 1 2 3 4 5 6 7 8; do
-      for reps in 1 2 3; do
-            ./scripts/run.sh --append-csv results/mpi_local_test.csv --np 2 -a mpi -n 20000 -p 32 -t 1
-      done 
-      for reps in 1 2 3; do
-            ./scripts/run.sh --append-csv results/mpi_local_test.csv --np 4 -a mpi -n 20000 -p 32 -t 1
-      done 
-done
+- `scripts/build.sh` : configure + build with CMake
+- `scripts/run.sh` : convenience wrapper for single-node runs + optional CSV append
+- `scripts/experiments` : Slurm experiment scripts (single node scaling, strong/weak scaling, etc.)
+- `build/` : build directory (default)
+- `results/` : CSV outputs
 
 
-# MPI local test fatto = > ora modificare codice e creare grafico 
-Alorithms: 
--a seq
--a omp
--a ff
+> The executable produced by CMake is expected at: `build/sorter`
+
+---
+
+# Build
+```bash
+./scripts/build.sh
+
+# Run
+
+Common command-line parameters:
+
+| Flag | Meaning |
+|-----|--------|
+| `-a` | algorithm (`seq`, `omp`, `ff`, `mpi`) |
+| `-n` | number of records |
+| `-p` | maximum payload size |
+| `-t` | number of threads |
+
+## Examples 
+
+### Single-node execution
+
+./build/sorter -a seq -n 1000000 -p 256
+
+### OpenMP version 
+export OMP_PLACES=cores
+export OMP_PROC_BIND=close
+export OMP_NUM_THREADS=16
+
+./build/sorter -a omp -n 100000 -p 16 -t 16
+
+### FastFlow version 
+./build/sorter -a ff -n 100000 -p 16 -t 16
+
+### Running using the wrapper script
+
+The script `scripts/run.sh` provides a convenient interface and can also
+append results to a CSV file.
+
+Example:
+./scripts/run.sh --append-csv results/test.csv -a ff -n 100000 -p 16 -t 16
+

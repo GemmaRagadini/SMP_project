@@ -49,12 +49,10 @@ for ((i=0; i<${#ARGS[@]}; i++)); do
   fi
 done
 
-# Default -t if missing and not seq
 if ! has_flag "-t" && [[ "$algo" != "seq" ]]; then
   ARGS+=("-t" "$DEFAULT_T")
 fi
 
-# --- CSV append helper (come prima, robusto) ---
 append_csv() {
   local tmp="$1"
   local dst="$2"
@@ -80,8 +78,6 @@ append_csv() {
   rm -f "$tmp.filtered"
 }
 
-# --- Main dispatch (solo seq/omp/ff) ---
-# Se qualcuno passa -a mpi, falliamo esplicitamente: MPI va lanciato dallo strong script con srun.
 if [[ "$algo" == "mpi" ]]; then
   echo "[error] algo=mpi not supported in run.sh anymore. Use the strong/weak scripts with srun." >&2
   exit 2

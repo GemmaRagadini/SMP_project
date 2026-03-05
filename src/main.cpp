@@ -18,17 +18,24 @@ int main(int argc, char** argv) {
     // legge argomenti passati
     Params p = parse_argv(argc, argv);
 
-    // -------------------------
     // Branch MPI (multi-nodo)
-    // -------------------------
     if (p.algo == "mpi") {
-        MPI_Init(&argc, &argv);
-
+        int provided = 0;
+        MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
+        
+        int is_main = 0;
+        MPI_Is_thread_main(&is_main);
+        if (!is_main) {
+            std::cerr << "[error] MPI initialized by a non-main thread\n";
+            MPI_Abort(MPI_COMM_WORLD, 1);
+        }
+    
         MPI_Comm_size(MPI_COMM_WORLD, &p.np);
         int rank = 0;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
+    
         int rc = run_mpi(p);
+    
         MPI_Finalize();
         return rc;
     }
