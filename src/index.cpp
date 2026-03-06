@@ -2,8 +2,8 @@
 #include <fstream> 
 #include <iostream>
 #include <stdexcept> 
-#include <algorithm>  // per sort 
-#include <cstddef> // per size_t
+#include <algorithm>  
+#include <cstddef> 
 #include <vector>
 #include <omp.h>
 #include <ff/ff.hpp>          
@@ -14,7 +14,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-
+// Builds the in-memory index of the dataset using memory mapping
 std::vector<IndexRec> build_index_mmap(const std::string& path, std::size_t n) {
 	int fd = ::open(path.c_str(), O_RDONLY);
 	if (fd < 0) throw std::runtime_error("open failed: " + path);
@@ -72,13 +72,13 @@ std::vector<IndexRec> build_index_mmap(const std::string& path, std::size_t n) {
 }
 
 
-//comparatore unico 
+//comparison
 bool index_less(const IndexRec& a, const IndexRec& b) {
 	if (a.key != b.key) return a.key < b.key; 
-	return a.offset < b.offset; // ulteriore confronto
+	return a.offset < b.offset; 
 }
 
-//controllo ordinamento
+//sorting check
 bool is_sorted_by_key(const std::vector<IndexRec>& idx){
 	for (std::size_t i = 1; i < idx.size(); ++i) {
 		if (index_less(idx[i], idx[i-1])) return false; 
@@ -86,9 +86,8 @@ bool is_sorted_by_key(const std::vector<IndexRec>& idx){
 	return true;
 }
 
-// combina due metà ordinate in un'unica porzione ordinata
+// Merges two adjacent sorted ranges [left, mid) and [mid, right) of the index array into a temporary buffer.
 static void merge_range(std::vector<IndexRec>&a, std::vector<IndexRec>& tmp, std::size_t left, std::size_t mid, std::size_t right) {
-	// mergia a[left:mid) e a[mid:right) in tmp, poi copia in a 
 	std::size_t i = left; 
 	std::size_t j = mid; 
 	std::size_t k = left; 
@@ -109,9 +108,7 @@ static void merge_range(std::vector<IndexRec>&a, std::vector<IndexRec>& tmp, std
 }
 
 
-
-// VERSIONE SEQUENZIALE
-
+//SEQUENTIAL VERSION	
 static void mergesort_rec(std::vector<IndexRec>& a, std::vector<IndexRec>& tmp, std::size_t left, std::size_t right) {
 	const std::size_t n = right - left; 
 	if (n<=1) return; 
@@ -129,11 +126,10 @@ void mergesort_index_seq(std::vector<IndexRec>& idx) {
 
 
 
-// VERSIONE OMP
-
+// OMP VERSION
 static void mergesort_rec_parallel(std::vector<IndexRec>& a, std::vector<IndexRec>& tmp, std::size_t left, std::size_t right, std::size_t cutoff){
 	const std::size_t n = right-left; 
-	if (n <= cutoff) { // dimensione sotto la quale fare sequenziale
+	if (n <= cutoff) {
 		std::sort(a.begin()+left, a.begin()+right, index_less); 
 		return;
 	}
@@ -157,7 +153,7 @@ void mergesort_index_openmp(std::vector<IndexRec>& idx, std::size_t cutoff) {
 }
 
 
-// VERSIONE FASTFLOW
+// FASTFLOW VERSION
 void mergesort_index_ff(std::vector<IndexRec>& idx, std::size_t cutoff, std::size_t nw) {
       
 	const std::size_t n = idx.size(); 
@@ -166,7 +162,6 @@ void mergesort_index_ff(std::vector<IndexRec>& idx, std::size_t cutoff, std::siz
 	std::size_t block = std::max<std::size_t>(1, cutoff); 
 	if (block > n) block = n;  
 
-	//numero workers 
 	std::size_t workers = (nw > 0) ? nw : (std::size_t) std::max<ssize_t>(1, ff_numCores()); 
 	if (workers == 0) workers = 1;
 

@@ -41,6 +41,7 @@ The comparator uses **(key, offset)** to ensure deterministic ordering with dupl
 ---
 
 # Build
+
 ```bash
 ./scripts/build.sh
 
@@ -72,10 +73,14 @@ export OMP_NUM_THREADS=16
 ./build/sorter -a ff -n 100000 -p 16 -t 16
 
 ### Running using the wrapper script
-
 The script `scripts/run.sh` provides a convenient interface and can also
 append results to a CSV file.
 
 Example:
 ./scripts/run.sh --append-csv results/test.csv -a ff -n 100000 -p 16 -t 16
 
+### Running an experiment on cluster
+Example: 
+./scripts/experiments/single_node_test_cluster_A.sh  
+
+Results will be in "results/" 

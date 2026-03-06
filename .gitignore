@@ -1,11 +1,5 @@
 build/
-*.o
-*.out
 .vscode
 data/
-results/
-!results/.gitkeep
-mynotes.txt
 venv/
-scripts/experiments/
 images/

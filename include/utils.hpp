@@ -11,13 +11,12 @@
 #include <string>
 #include <chrono> 
 
-// Parametri minimi
 struct Params {
     std::size_t   n_records   = 1'000'000;
     std::uint32_t payload_max = 256;
     std::size_t   n_threads   = 1;
     size_t cutoff = 16384; 
-    int np = 1; // per mpi
+    int np = 1; 
     std::string algo = "seq";
 };
 

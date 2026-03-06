@@ -1,5 +1,3 @@
-// Implementa quello che è dichiarato in io.hpp
-
 #include "io.hpp"
 #include "index.hpp"
 
@@ -14,15 +12,14 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <cstring>   // memcpy
+#include <cstring>   
 
-
-//creazione path
+// path creation
 static std::string make_path(std::size_t n, std::uint32_t pmax) {
 	return "data/unsorted_"+std::to_string(n)+"_"+std::to_string(pmax)+".bin"; 
 }
 
-//genera un file binario non ordinato in data/ e ritorna il suo path. Se già esiste, viene riusato
+//Ensures that an input dataset exists. If the file is already present it is reused, otherwise a new binary dataset with n_records records is generated.
 string ensure_unsorted_file(std::size_t n_records, std::uint32_t payload_max, GenStats* st) {
 	namespace fs = std::filesystem;
 	fs::create_directories("data"); 
@@ -76,8 +73,8 @@ string ensure_unsorted_file(std::size_t n_records, std::uint32_t payload_max, Ge
 	return path;
 }
 
+//in path: data/unsorted_N_P.bin => data/sorted_N_P.bin 
 static std::string make_sorted_path_from_unsorted(const std::string& in_path){
-	//in path: data/unsorted_N_P.bin => data/sorted_N_P.bin 
 	std::string out = in_path; 
 	auto pos = out.find("unsorted_"); 
 	if (pos != std::string::npos) out.replace(pos, std::string("unsorted_").size(), "sorted_"); 
@@ -165,6 +162,7 @@ bool rewrite_sorted_file_mmap(const std::string& in_path, const std::string& out
 	return true;
 }
 
+// Rewrites the output file in sorted order using the sorted index.
 bool check_sorted_file_mmap(const std::string& path, std::size_t expected_n) {
      
 	int fd = ::open(path.c_str(), O_RDONLY);
@@ -220,7 +218,7 @@ bool check_sorted_file_mmap(const std::string& path, std::size_t expected_n) {
 		pos += len;
 	}
 
-	// strict: after expected_n records, must be exactly EOF
+	// after expected_n records, must be exactly EOF
 	if (pos != sz) {
 		std::cerr << "[check] File has extra bytes (pos=" << pos << " sz=" << sz << ")\n";
 		::munmap((void*)base, sz);

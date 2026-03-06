@@ -82,8 +82,11 @@ Params parse_argv(int argc, char** argv) {
     return p;
 }
 
+
 double seconds_since(const std::chrono::steady_clock::time_point& t0) {
       using namespace std::chrono;
       return duration<double>(steady_clock::now() - t0).count();
 }
   
+
+

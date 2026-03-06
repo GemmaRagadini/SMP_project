@@ -1,5 +1,3 @@
-// Eseguibile baseline sequenziale / OMP / FastFlow / MPI+OMP
-
 #include <iostream>
 #include <string>
 #include <chrono>
@@ -15,10 +13,9 @@
 
 int main(int argc, char** argv) {
 
-    // legge argomenti passati
     Params p = parse_argv(argc, argv);
 
-    // Branch MPI (multi-nodo)
+    // Branch MPI + openMP
     if (p.algo == "mpi") {
         int provided = 0;
         MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
@@ -40,9 +37,8 @@ int main(int argc, char** argv) {
         return rc;
     }
 
-    // -------------------------
     // Single-node (seq/omp/ff)
-    // -------------------------
+
     auto t_total0 = std::chrono::steady_clock::now();
 
     std::cout << "MergeSort\n";
@@ -52,7 +48,8 @@ int main(int argc, char** argv) {
     std::cout << "threads     : " << p.n_threads   << "\n";
 
     GenStats st{};
-    // si assicura che esista un file binario di input non ordinato e coerente con i parametri
+    
+    // input binary file
     const std::string in_path = ensure_unsorted_file(p.n_records, p.payload_max, &st);
 
     // build index
@@ -77,7 +74,7 @@ int main(int argc, char** argv) {
     }
     double t_sort = seconds_since(t0);
 
-    // controllo sorted
+    // sorting check
     if (!is_sorted_by_key(idx)) {
         std::cerr << "[error] Index is NOT sorted by key\n";
         return 1;
@@ -116,13 +113,11 @@ int main(int argc, char** argv) {
         header_printed = true;
     }
 
+    // printing threads number
     int threads = 1;
-
     #ifdef _OPENMP
-    // per OMP: il runtime sa quanti thread userà (dopo omp_set_num_threads)
     if (p.algo == "omp") threads = omp_get_max_threads();
-#endif
-    // per FastFlow interessa il parametro esplicito
+    #endif
     if (p.algo == "ff" && p.n_threads > 0) threads = (int)p.n_threads;
         
     std::cout
