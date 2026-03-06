@@ -4,10 +4,8 @@ project(spm_project2 CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Opzione: abilita sanitizer in Debug (default ON)
 option(ENABLE_ASAN "Enable sanitizers (ASan/UBSan) in Debug builds" ON)
 
-# Pacchetti
 find_package(MPI REQUIRED)
 find_package(OpenMP REQUIRED)
 
@@ -33,7 +31,6 @@ target_link_libraries(sorter PRIVATE
   OpenMP::OpenMP_CXX
 )
 
-# Sanitizers SOLO in Debug
 if (ENABLE_ASAN)
   target_compile_options(sorter PRIVATE
     $<$<CONFIG:Debug>:-fsanitize=address,undefined -fno-omit-frame-pointer -O0 -g>
