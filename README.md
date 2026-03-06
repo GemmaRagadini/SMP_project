@@ -40,7 +40,7 @@ The comparator uses **(key, offset)** to ensure deterministic ordering with dupl
 
 ---
 
-# Build
+# Build and Execute
 
 ```bash
 ./scripts/build.sh
