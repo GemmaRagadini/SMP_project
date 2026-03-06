@@ -38,11 +38,22 @@ The comparator uses **(key, offset)** to ensure deterministic ordering with dupl
 
 > The executable produced by CMake is expected at: `build/sorter`
 
----
 
 # Build and Execute
 
-```bash
+## Dependencies
+
+This project requires:
+
+- CMake >= 3.16
+- a C++20 compiler
+- MPI
+- OpenMP
+- FastFlow
+
+git clone https://github.com/fastflow/fastflow.git
+
+## Build
 ./scripts/build.sh
 
 # Run
